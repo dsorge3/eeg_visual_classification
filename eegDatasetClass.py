@@ -9,7 +9,6 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 
-image_size = 64
 DATA_DIR = '/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/test'
 transform = ([transforms.Resize(255),
                 transforms.CenterCrop(224),
