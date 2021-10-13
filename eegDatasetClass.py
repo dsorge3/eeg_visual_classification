@@ -40,9 +40,9 @@ class EEGDataset(Dataset):
         return self.size
 
     # Get item
-    def __getitem__(self, i, index):
+    def __getitem__(self, i):
         # Select sample
-        image = self.ims[index]
+        image = self.ims[i]
         X = self.transform(image)
         # Process EEG
         eeg = self.data[i]["eeg"].float().t()
