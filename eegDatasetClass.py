@@ -1,8 +1,29 @@
+from torch.utils.data import DataLoader, Dataset
+from torchvision import datasets, transforms
+import torch
+import torch.nn as nn
+from torchvision.utils import make_grid
+from torchvision.utils import save_image
+from IPython.display import Image
+import matplotlib.pyplot as plt
+import numpy as np
+import random
+
+image_size = 64
+DATA_DIR = '/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/test'
+transform = ([transforms.Resize(255),
+                transforms.CenterCrop(224),
+                transforms.ToTensor()])
+X_train = datasets.ImageFolder(DATA_DIR, transform=transform)
+
 # Dataset class
-class EEGDataset:
+class EEGDataset(Dataset):
     
     # Constructor
-    def __init__(self, eeg_signals_path):
+    def __init__(self, eeg_signals_path, ims):
+        # Initialization
+        self.ims = ims
+        
         # Load EEG signals
         loaded = torch.load(eeg_signals_path)
         if opt.subject!=0:
@@ -20,7 +41,10 @@ class EEGDataset:
         return self.size
 
     # Get item
-    def __getitem__(self, i):
+    def __getitem__(self, i, index):
+        # Select sample
+        image = self.ims[index]
+        X = self.transform(image)
         # Process EEG
         eeg = self.data[i]["eeg"].float().t()
         eeg = eeg[opt.time_low:opt.time_high,:]
@@ -31,4 +55,11 @@ class EEGDataset:
         # Get label
         label = self.data[i]["label"]
         # Return
-        return eeg, label
+        return eeg, label, X
+
+batch_size = 32
+eeg_dataset = EEGDataset(ims=X_train)
+train_dl = DataLoader(eeg_dataset, batch_size, shuffle=True, num_workers=3, pin_memory=True)
+# to test data loader
+images, labels = next(iter(train_dl))
+imshow(images[0], normalize=False)
