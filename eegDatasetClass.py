@@ -9,7 +9,7 @@ import matplotlib.pyplot as plt
 import numpy as np
 import random
 
-DATA_DIR = '/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/test'
+DATA_DIR = '/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/test/'
 filenames = [name for name in os.listdir(DATA_DIR)]
 
 # Dataset class
@@ -52,6 +52,10 @@ class EEGDataset(Dataset):
         label = self.data[i]["label"]
         # Return
         return eeg, label, X
+    
+    transform = ([transforms.Resize(255),
+                  transforms.CenterCrop(224),
+                  transforms.ToTensor()])
 
 eegdataset = EEGDataset(ims=filenames)
 batch_size = len(eegdataset)
