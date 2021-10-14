@@ -10,10 +10,7 @@ import numpy as np
 import random
 
 DATA_DIR = '/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/test'
-transform = ([transforms.Resize(255),
-                transforms.CenterCrop(224),
-                transforms.ToTensor()])
-X_train = datasets.ImageFolder(DATA_DIR, transform=transform)
+filenames = [name for name in os.listdir(DATA_DIR)]
 
 # Dataset class
 class EEGDataset(Dataset):
@@ -56,9 +53,11 @@ class EEGDataset(Dataset):
         # Return
         return eeg, label, X
 
-batch_size = 32
-eeg_dataset = EEGDataset(ims=X_train)
-train_dl = DataLoader(eeg_dataset, batch_size, shuffle=True, num_workers=3, pin_memory=True)
-# to test data loader
-images, labels = next(iter(train_dl))
-imshow(images[0], normalize=False)
+eegdataset = EEGDataset(ims=filenames)
+batch_size = len(eegdataset)
+batch = torch.zeros(batch_size, 3, 256, 256, dtype=torch.uint8)
+
+for i, filename in enumerate(filenames):
+ batch[i] = torchvision.io.read_image(os.path.join(DATA_DIR, filename))
+
+plt.imshow(batch[0].permute(1, 2, 0))
