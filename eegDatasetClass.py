@@ -106,17 +106,3 @@ class EEGDataset:
         img = cv2.imread(imgPath, cv2.IMREAD_COLOR)
         # Return
         return eeg, label, img
-
-# Load dataset
-dataset = EEGDataset(opt.eeg_dataset)
-# testing
-eeg,label,img = dataset.__getitem__(0)
-print(img)
-
-#print("Nome immagine:", imgName)
-#dirName = imgName[:9]
-#print("Nome directory:", dirName)
-#data_dir = "/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/train/" + dirName + "/" + imgName + ".JPEG"
-#print("Path completo:", data_dir)
-#img = cv2.imread(data_dir, cv2.IMREAD_COLOR)
-#print(img)
