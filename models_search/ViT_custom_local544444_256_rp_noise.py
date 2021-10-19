@@ -386,20 +386,20 @@ class Generator(nn.Module):
 #         elif isinstance(m, nn.InstanceNorm1d):
 #             nn.init.constant_(m.bias, 0)
 #             nn.init.constant_(m.weight, 1.0)
-    def forward(self, z, epoch):
+    def forward(self, eeg, epoch):
+        if self.args.latent_norm:
+            latent_size = eeg.size(-1)
+            eeg = (eeg/eeg.norm(dim=-1, keepdim=True) * (latent_size ** 0.5))
         if self.args.latent_norm:
             latent_size = z.size(-1)
-            z = (z/z.norm(dim=-1, keepdim=True) * (latent_size ** 0.5))
-        if self.args.latent_norm:
-            latent_size = z.size(-1)
-            z = (z/z.norm(dim=-1, keepdim=True) * (latent_size ** 0.5))
+            eeg = (eeg/eeg.norm(dim=-1, keepdim=True) * (latent_size ** 0.5))
         if self.l2_size == 0:
-            x = self.l1(z).view(-1, self.bottom_width ** 2, self.embed_dim)
+            x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.embed_dim)
         elif self.l2_size > 1000:
-            x = self.l1(z).view(-1, self.bottom_width ** 2, self.l2_size//16)
+            x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.l2_size//16)
             x = self.l2(x)
         else:
-            x = self.l1(z).view(-1, self.bottom_width ** 2, self.l2_size)
+            x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.l2_size)
             x = self.l2(x)
             
         x = x + self.pos_embed[0]
@@ -450,6 +450,7 @@ class Generator(nn.Module):
         
         output = self.deconv(x)
         return output
+    
 def _downsample(x):
     # Downsample (Mean Avg Pooling with 2x2 kernel)
     return nn.AvgPool2d(kernel_size=2)(x)
