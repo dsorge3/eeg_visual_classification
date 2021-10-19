@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Date    : 2019-07-25
-# @Author  : Xinyu Gong (xy_gong@tamu.edu)
-# @Link    : None
-# @Version : 0.0
-
 import logging
 import operator
 import os
@@ -77,25 +71,20 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
     
     dis_optimizer.zero_grad()
     gen_optimizer.zero_grad()
-    for iter_idx, (imgs, _) in enumerate(tqdm(train_loader)):
+    # **MODIFICA3: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
+    for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
-        
 
         # Adversarial ground truths
         real_imgs = imgs.type(torch.cuda.FloatTensor).cuda(args.gpu, non_blocking=True)
 
-        # Sample noise as generator input
-        z = torch.cuda.FloatTensor(np.random.normal(0, 1, (imgs.shape[0], args.latent_dim))).cuda(args.gpu, non_blocking=True)
-
         # ---------------------
         #  Train Discriminator
         # ---------------------
-        
 
         real_validity = dis_net(real_imgs)
-        fake_imgs = gen_net(z, epoch).detach()
+        fake_imgs = gen_net(eeg, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
-
         fake_validity = dis_net(fake_imgs)
 
         # cal loss
@@ -156,8 +145,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
             
             for accumulated_idx in range(args.g_accumulated_times):
-                gen_z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.gen_batch_size, args.latent_dim)))
-                gen_imgs = gen_net(gen_z, epoch)
+                gen_imgs = gen_net(eeg, epoch)
                 fake_validity = dis_net(gen_imgs)
 
                 # cal loss
@@ -178,7 +166,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
                     fake_image1, fake_image2 = gen_imgs[:args.gen_batch_size//2], gen_imgs[args.gen_batch_size//2:]
-                    z_random1, z_random2 = gen_z[:args.gen_batch_size//2], gen_z[args.gen_batch_size//2:]
+                    z_random1, z_random2 = eeg[:args.gen_batch_size//2], eeg[args.gen_batch_size//2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
                     torch.abs(z_random2 - z_random1))
                     eps = 1 * 1e-5
@@ -241,9 +229,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         writer_dict['train_global_steps'] = global_steps + 1 
 
 
-
-
-
 def get_is(args, gen_net: nn.Module, num_img):
     """
     Get inception score.
@@ -262,8 +247,10 @@ def get_is(args, gen_net: nn.Module, num_img):
         z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
 
         # Generate a batch of images
-        gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu',
-                                                                                                torch.uint8).numpy()
+        #gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+        #img_list.extend(list(gen_imgs))
+
+        gen_imgs = gen_net(eeg).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
         img_list.extend(list(gen_imgs))
 
     # get inception score
