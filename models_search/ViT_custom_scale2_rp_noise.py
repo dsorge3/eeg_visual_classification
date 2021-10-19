@@ -352,8 +352,8 @@ class Generator(nn.Module):
     def set_arch(self, x, cur_stage):
         pass
 
-    def forward(self, z, epoch):
-        x = self.l1(z).view(-1, self.bottom_width ** 2, self.embed_dim)
+    def forward(self, eeg, epoch):
+        x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.embed_dim)
         x = x + self.pos_embed[0].to(x.get_device())
         B = x.size(0)
         H, W = self.bottom_width, self.bottom_width
