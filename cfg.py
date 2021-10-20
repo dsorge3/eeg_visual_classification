@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Date    : 2019-07-25
-# @Author  : Xinyu Gong (xy_gong@tamu.edu)
-# @Link    : None
-# @Version : 0.0
-
 import argparse
 
 
@@ -53,6 +47,17 @@ def parse_args():
         type=int,
         default=64,
         help='size of the batches')
+    parser.add_argument(
+        '-sp',
+        '--splits-path',
+        default=r"data\block\block_splits_by_image_all.pth",
+        help="splits path")
+    parser.add_argument(
+        '-sn',
+        '--split-num',
+        default=0,
+        type=int,
+        help="split number")
     parser.add_argument(
         '-dis_bs',
         '--dis_batch_size',
@@ -156,6 +161,26 @@ def parse_args():
         type=str,
         default='./data',
         help='The path of data set')
+    parser.add_argument(
+        '--eeg_dataset',
+        type=str,
+        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_5_95_std.pth",
+        help="EEG dataset path")
+    parser.add_argument(
+        '--subject',
+        default=0,
+        type=int,
+        help="choose a subject from 1 to 6, default is 0 (all subjects)")
+    parser.add_argument(
+        '--time_low',
+        default=20,
+        type=float,
+        help="lowest time value")
+    parser.add_argument(
+        '--time_high',
+        default=460,
+        type=float,
+        help="highest time value")
     parser.add_argument('--init_type', type=str, default='normal',
                         choices=['normal', 'orth', 'xavier_uniform', 'false'],
                         help='The init type')
