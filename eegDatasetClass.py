@@ -6,27 +6,6 @@ parser = argparse.ArgumentParser(description="Template")
 
 # Data - Data needs to be pre-filtered and filtered data is available
 
-### BLOCK DESIGN ###
-# Data
-# parser.add_argument('-ed', '--eeg-dataset', default=r"data\block\eeg_55_95_std.pth", help="EEG dataset path") #55-95Hz
-parser.add_argument('-ed', '--eeg-dataset', default=r"data\block\eeg_5_95_std.pth", help="EEG dataset path")  # 5-95Hz
-# parser.add_argument('-ed', '--eeg-dataset', default=r"data\block\eeg_14_70_std.pth", help="EEG dataset path") #14-70Hz
-# Splits
-parser.add_argument('-sp', '--splits-path', default=r"data\block\block_splits_by_image_all.pth",
-                    help="splits path")  # All subjects
-# parser.add_argument('-sp', '--splits-path', default=r"data\block\block_splits_by_image_single.pth", help="splits path") #Single subject
-### BLOCK DESIGN ###
-
-parser.add_argument('-sn', '--split-num', default=0, type=int, help="split number")  # leave this always to zero.
-
-# Subject selecting
-parser.add_argument('-sub', '--subject', default=0, type=int,
-                    help="choose a subject from 1 to 6, default is 0 (all subjects)")
-
-# Time options: select from 20 to 460 samples from EEG data
-parser.add_argument('-tl', '--time_low', default=20, type=float, help="lowest time value")
-parser.add_argument('-th', '--time_high', default=460, type=float, help="highest time value")
-
 # Model type/options
 parser.add_argument('-mt', '--model_type', default='lstm',
                     help='specify which generator should be used: lstm|EEGChannelNet')
@@ -56,25 +35,21 @@ opt = parser.parse_args()
 print(opt)
 
 # Imports
-import torch;
-
-torch.utils.backcompat.broadcast_warning.enabled = True
+import torch; torch.utils.backcompat.broadcast_warning.enabled = True
 import torch.optim
-import torch.backends.cudnn as cudnn;
-
-cudnn.benchmark = True
+import torch.backends.cudnn as cudnn; cudnn.benchmark = True
 import cv2
 
 # Dataset class
 class EEGDataset:
 
     # Constructor
-    def __init__(self, eeg_signals_path):
+    def __init__(self, args, eeg_signals_path):
         # Load EEG signals
         loaded = torch.load(eeg_signals_path)
-        if opt.subject != 0:
+        if args.subject != 0:
             self.data = [loaded['dataset'][i] for i in range(len(loaded['dataset'])) if
-                         loaded['dataset'][i]['subject'] == opt.subject]
+                         loaded['dataset'][i]['subject'] == args.subject]
         else:
             self.data = loaded['dataset']
             self.labels = loaded["labels"]
@@ -88,17 +63,17 @@ class EEGDataset:
         return self.size
 
     # Get item
-    def __getitem__(self, i):
+    def __getitem__(self, args, i):
         # Process EEG
         eeg = self.data[i]["eeg"].float().t()
-        eeg = eeg[opt.time_low:opt.time_high, :]
+        eeg = eeg[args.time_low:args.time_high, :]
 
         if opt.model_type == "model10":
             eeg = eeg.t()
-            eeg = eeg.view(1, 128, opt.time_high - opt.time_low)
+            eeg = eeg.view(1, 128, args.time_high - args.time_low)
         # Get label
         label = self.data[i]["label"]
-        # Get image
+        # Get image                           **MODIFICA2: RETURN IMMAGINE DAL DATASET IMAGENET**
         image = self.images[i]
         # Get complete path
         dirName = image[:9]
