@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import cfg
-import models_search
+#import models_search
 import datasets
 from functions import train, validate, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
 from utils.utils import set_log_dir, save_checkpoint, create_logger
@@ -18,7 +18,7 @@ import os
 import numpy as np
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-from tqdm import tqdm
+#from tqdm import tqdm
 from copy import deepcopy
 from adamw import AdamW
 import random 
@@ -294,4 +294,3 @@ def main_worker(gpu, ngpus_per_node, args):
 
 if __name__ == '__main__':
     main()
-
