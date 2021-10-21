@@ -4,12 +4,12 @@
 # @Link    : None
 # @Version : 0.0
 
-from functools import partial
-import torch
+#from functools import partial
+#import torch
 import os
-import PIL
-from torchvision.datasets.vision import VisionDataset
-from torchvision.datasets.utils import download_file_from_google_drive, check_integrity, verify_str_arg
+#import PIL
+#from torchvision.datasets.vision import VisionDataset
+#from torchvision.datasets.utils import download_file_from_google_drive, check_integrity, verify_str_arg
 from torch.utils.data import Dataset
 import glob
 
