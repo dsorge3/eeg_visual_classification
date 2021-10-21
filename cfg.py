@@ -49,8 +49,8 @@ def parse_args():
         help='size of the batches')
     parser.add_argument(
         '-sp',
-        '--splits-path',
-        default=r"data\block\block_splits_by_image_all.pth",
+        '--splits_path',
+        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvppr_2017/block_splits_by_image_all.pth",
         help="splits path")
     parser.add_argument(
         '-sn',
@@ -164,8 +164,13 @@ def parse_args():
     parser.add_argument(
         '--eeg_dataset',
         type=str,
-        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_5_95_std.pth",
+        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvppr_2017/eeg_5_95_std.pth",
         help="EEG dataset path")
+    parser.add_argument(
+        '-mt',
+        '--model_type',
+        default='lstm',
+        help='specify which generator should be used: lstm|EEGChannelNet')
     parser.add_argument(
         '--subject',
         default=0,
