@@ -3,17 +3,17 @@ from __future__ import division
 from __future__ import print_function
 
 import logging
-import operator
-import os
-from copy import deepcopy
+#import operator
+#import os
+#from copy import deepcopy
 
-import numpy as np
-import torch
+#import numpy as np
+#import torch
 import torch.nn as nn
-from imageio import imsave
-from torchvision.utils import make_grid, save_image
+#from imageio import imsave
+#from torchvision.utils import make_grid, save_image
 from tqdm import tqdm
-import cv2
+#import cv2
 
 from utils.fid_score import calculate_fid_given_paths
 # from utils.torch_fid_score import get_fid
@@ -22,7 +22,7 @@ from utils.fid_score import calculate_fid_given_paths
 logger = logging.getLogger(__name__)
 
 import cfg
-import models_search
+#import models_search
 from functions import validate
 from utils.utils import set_log_dir, create_logger
 from utils.inception_score import _init_inception
@@ -32,7 +32,7 @@ import torch
 import os
 import numpy as np
 from tensorboardX import SummaryWriter
-from utils.inception_score import get_inception_score
+#from utils.inception_score import get_inception_score
 
 torch.backends.cudnn.enabled = True
 torch.backends.cudnn.benchmark = True
