@@ -6,10 +6,11 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
-from imageio import imsave
+#from imageio import imsave
 from utils.utils import make_grid, save_image
 from tqdm import tqdm
-import cv2
+#import cv2
+#from eegDatasetClass import EEGDataset, opt
 
 # from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
@@ -72,15 +73,24 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
     dis_optimizer.zero_grad()
     gen_optimizer.zero_grad()
     # **MODIFICA3: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
+    #for iter_idx, (imgs, _) in enumerate(tqdm(train_loader)):
     for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
 
         # Adversarial ground truths
         real_imgs = imgs.type(torch.cuda.FloatTensor).cuda(args.gpu, non_blocking=True)
 
+        # Sample noise as generator input
+        #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (imgs.shape[0], args.latent_dim))).cuda(args.gpu, non_blocking=True)
+
         # ---------------------
         #  Train Discriminator
         # ---------------------
+
+        #real_validity = dis_net(real_imgs)
+        #fake_imgs = gen_net(z, epoch).detach()
+        #assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
+        #fake_validity = dis_net(fake_imgs)
 
         real_validity = dis_net(real_imgs)
         fake_imgs = gen_net(eeg, epoch).detach()
@@ -145,6 +155,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
             
             for accumulated_idx in range(args.g_accumulated_times):
+                #gen_z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.gen_batch_size, args.latent_dim)))
                 gen_imgs = gen_net(eeg, epoch)
                 fake_validity = dis_net(gen_imgs)
 
