@@ -3,7 +3,7 @@ from __future__ import division
 from __future__ import print_function
 
 import cfg
-#import models_search
+import models_search
 import datasets
 from functions import train, validate, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
 from utils.utils import set_log_dir, save_checkpoint, create_logger
@@ -105,7 +105,10 @@ def main_worker(gpu, ngpus_per_node, args):
             nn.init.constant_(m.bias.data, 0.0)
 
     # import network
-    
+    gen_net = eval('models_search.' + args.gen_model + '.Generator')(args=args)
+    dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
+    gen_net.apply(weights_init)
+    dis_net.apply(weights_init)
     
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -116,11 +119,11 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.gpu is not None:
             
             torch.cuda.set_device(args.gpu)
-            gen_net = eval('models_search.'+args.gen_model+'.Generator')(args=args)
-            dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
+            #gen_net = eval('models_search.'+args.gen_model+'.Generator')(args=args)
+            #dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
 
-            gen_net.apply(weights_init)
-            dis_net.apply(weights_init)
+            #gen_net.apply(weights_init)
+            #dis_net.apply(weights_init)
             gen_net.cuda(args.gpu)
             dis_net.cuda(args.gpu)
             # When using a single GPU per process and per
@@ -165,15 +168,15 @@ def main_worker(gpu, ngpus_per_node, args):
     dis_scheduler = LinearLrDecay(dis_optimizer, args.d_lr, 0.0, 0, args.max_iter * args.n_critic)
 
     # fid stat
-    if args.dataset.lower() == 'cifar10':
-        fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
-    elif args.dataset.lower() == 'stl10':
-        fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
-    elif args.fid_stat is not None:
-        fid_stat = args.fid_stat
-    else:
-        raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
-    assert os.path.exists(fid_stat)
+    #if args.dataset.lower() == 'cifar10':
+    #    fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
+    #elif args.dataset.lower() == 'stl10':
+    #    fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
+    #elif args.fid_stat is not None:
+    #    fid_stat = args.fid_stat
+    #else:
+    #    raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
+    #assert os.path.exists(fid_stat)
 
 
     # epoch number for dis_net
@@ -254,13 +257,13 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.rank == 0 and args.show:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
-            save_samples(args, fixed_z, fid_stat, epoch, gen_net, writer_dict)
+            save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
             load_params(gen_net, backup_param, args)
         
         if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch)-1:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
-            inception_score, fid_score = validate(args, fixed_z, fid_stat, epoch, gen_net, writer_dict)
+            inception_score, fid_score = validate(args, fixed_z, None, epoch, gen_net, writer_dict)
             if args.rank==0:
                 logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
             load_params(gen_net, backup_param, args)
