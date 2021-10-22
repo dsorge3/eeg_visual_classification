@@ -1,10 +1,12 @@
 import torch
 import torchvision.datasets as datasets
 import torchvision.transforms as transforms
-#from torch.utils.data import Dataset
+from torch.utils.data import Dataset
 from celeba import CelebA, FFHQ
 from eegDatasetClass import EEGDataset
 from splitterClass import Splitter
+import torch.distributed as dist
+dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, world_size=1)
 
 class ImageDataset(object):
     def __init__(self, args, cur_img_size=None, bs=None):
@@ -77,27 +79,30 @@ class ImageDataset(object):
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
 
-            self.train = torch.utils.data.DataLoader(Splitter(
+            self.train = {split: torch.utils.data.DataLoader(Splitter(
                 train_dataset,
                 split_path=args.splits_path,
-                split_num=args.split_num),
+                split_num=args.split_num,
+                split_name=split),
                 batch_size=args.dis_batch_size,
                 shuffle=(train_sampler is None),
-                num_workers=args.num_workers, pin_memory=True, drop_last=True, sampler=train_sampler)
+                num_workers=args.num_workers, pin_memory=True, drop_last=True, sampler=train_sampler) for split in ["train", "val", "test"]}
 
-            self.valid = torch.utils.data.DataLoader(Splitter(
-                val_dataset,
-                split_path=args.splits_path,
-                split_num=args.split_num),
-                batch_size=args.dis_batch_size, shuffle=False,
-                num_workers=args.num_workers, pin_memory=True, sampler=val_sampler)
+            #self.valid = torch.utils.data.DataLoader(Splitter(
+            #    val_dataset,
+            #    split_path=args.splits_path,
+            #    split_num=args.split_num,
+            #    split_name="train/val/test"),
+            #    batch_size=args.dis_batch_size, shuffle=False,
+            #    num_workers=args.num_workers, pin_memory=True, sampler=val_sampler)
 
-            self.test = torch.utils.data.DataLoader(Splitter(
-                val_dataset,
-                split_path=args.splits_path,
-                split_num=args.split_num),
-                batch_size=args.dis_batch_size, shuffle=False,
-                num_workers=args.num_workers, pin_memory=True, sampler=val_sampler)
+            #self.test = torch.utils.data.DataLoader(Splitter(
+            #    val_dataset,
+            #    split_path=args.splits_path,
+            #    split_num=args.split_num,
+            #    split_name="train/val/test"),
+            #    batch_size=args.dis_batch_size, shuffle=False,
+            #    num_workers=args.num_workers, pin_memory=True, sampler=val_sampler)
 
         elif args.dataset.lower() == 'celeba':
             Dt = CelebA
