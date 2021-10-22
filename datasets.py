@@ -6,7 +6,6 @@ from celeba import CelebA, FFHQ
 from eegDatasetClass import EEGDataset
 from splitterClass import Splitter
 import torch.distributed as dist
-dist.init_process_group('gloo', init_method='file:///tmp/somefile', rank=0, world_size=1)
 
 class ImageDataset(object):
     def __init__(self, args, cur_img_size=None, bs=None):
