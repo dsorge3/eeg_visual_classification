@@ -14,4 +14,4 @@ module load cuda/10.1
 source /home/d.sorge/.bashrc
 conda activate venv
 
-python train_derived.py --load_path ViT_custom.py --dataset eegdataset --gen_model ViT_custom.py --dis_model ViT_custom.py
+python train_derived.py --dataset eegdataset --gen_model ViT_custom_rp --dis_model ViT_custom_scale2_rp_noise --max_iter 500000 --exp_name eeg_train --grow_steps 0 0
