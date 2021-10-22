@@ -6,11 +6,11 @@ from copy import deepcopy
 import numpy as np
 import torch
 import torch.nn as nn
-#from imageio import imsave
+from imageio import imsave
+from utils.inception_score import get_inception_score
 from utils.utils import make_grid, save_image
 from tqdm import tqdm
-#import cv2
-#from eegDatasetClass import EEGDataset, opt
+import cv2
 
 # from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
@@ -312,12 +312,12 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
 #     mean, std = 0, 0
     # get fid score
     print('=> calculate fid score') if args.rank == 0 else 0
-    if args.rank == 0:
-        fid_score = get_fid(args, fid_stat, epoch, gen_net, args.num_eval_imgs, args.gen_batch_size, args.eval_batch_size, writer_dict=writer_dict, cls_idx=None)
-    else:
-        fid_score = 10000
+    #if args.rank == 0:
+    #    fid_score = get_fid(args, fid_stat, epoch, gen_net, args.num_eval_imgs, args.gen_batch_size, args.eval_batch_size, writer_dict=writer_dict, cls_idx=None)
+    #else:
+    #    fid_score = 10000
     # fid_score = 10000
-    print(f"FID score: {fid_score}") if args.rank == 0 else 0
+    #print(f"FID score: {fid_score}") if args.rank == 0 else 0
     
 #     if args.gpu == 0:
 #         if clean_dir:
@@ -329,11 +329,11 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
     if args.rank == 0:
         writer.add_scalar('Inception_score/mean', mean, global_steps)
         writer.add_scalar('Inception_score/std', std, global_steps)
-        writer.add_scalar('FID_score', fid_score, global_steps)
+        #writer.add_scalar('FID_score', fid_score, global_steps)
 
         writer_dict['valid_global_steps'] = global_steps + 1
 
-    return mean, fid_score
+    return mean, -9999
 
 
 def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
