@@ -3,12 +3,15 @@ import torch; torch.utils.backcompat.broadcast_warning.enabled = True
 import torch.optim
 import torch.backends.cudnn as cudnn; cudnn.benchmark = True
 import cv2
+import cfg
+
+args = cfg.parse_args()
 
 # Dataset class
 class EEGDataset:
 
     # Constructor
-    def __init__(self, args, eeg_signals_path):
+    def __init__(self, eeg_signals_path):
         # Load EEG signals
         loaded = torch.load(eeg_signals_path)
         if args.subject != 0:
@@ -27,7 +30,7 @@ class EEGDataset:
         return self.size
 
     # Get item
-    def __getitem__(self, args, i):
+    def __getitem__(self, i):
         # Process EEG
         eeg = self.data[i]["eeg"].float().t()
         eeg = eeg[args.time_low:args.time_high, :]
