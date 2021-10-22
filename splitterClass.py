@@ -1,5 +1,12 @@
 # Imports
-import torch
+import torch;
+
+torch.utils.backcompat.broadcast_warning.enabled = True
+import torch.optim
+import torch.backends.cudnn as cudnn;
+
+cudnn.benchmark = True
+
 
 # Splitter class
 class Splitter:
