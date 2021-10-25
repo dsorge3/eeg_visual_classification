@@ -41,7 +41,8 @@ class EEGDataset:
         # Get label
         label = self.data[i]["label"]
         # Get image                           **MODIFICA2: RETURN IMMAGINE DAL DATASET IMAGENET**
-        image = self.images[i]
+        img_idx = self.data[i]['image']
+        image = self.images[img_idx]
         # Get complete path
         dirName = image[:9]
         imgPath = "/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/train/" + dirName + "/" + image + ".JPEG"
