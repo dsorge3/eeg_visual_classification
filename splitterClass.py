@@ -29,6 +29,6 @@ class Splitter:
     # Get item
     def __getitem__(self, i):
         # Get sample from dataset
-        eeg, label = self.dataset[self.split_idx[i]]
+        eeg, label, img = self.dataset[self.split_idx[i]]
         # Return
-        return eeg, label
+        return eeg, label, img
