@@ -7,8 +7,8 @@ import models_search
 import datasets
 from functions import train, validate, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
 from utils.utils import set_log_dir, save_checkpoint, create_logger
-# from utils.inception_score import _init_inception
-# from utils.fid_score import create_inception_graph, check_or_download_inception
+from utils.inception_score import _init_inception
+from utils.fid_score import create_inception_graph, check_or_download_inception
 
 import torch
 import torch.multiprocessing as mp
@@ -18,10 +18,12 @@ import os
 import numpy as np
 import torch.nn as nn
 from tensorboardX import SummaryWriter
-#from tqdm import tqdm
+from tqdm import tqdm
 from copy import deepcopy
 from adamw import AdamW
-import random 
+import random
+
+from eegDatasetClass import EEGDataset
 
 # torch.backends.cudnn.enabled = True
 # torch.backends.cudnn.benchmark = True
@@ -244,6 +246,23 @@ def main_worker(gpu, ngpus_per_node, args):
         'valid_global_steps': start_epoch // args.val_freq,
     }
 
+    #dataset = EEGDataset(args.eeg_dataset, args.splits_path, args.split_num)
+    #lentr = dataset.get()
+    #print("len trSet", lentr)
+    #split = dataset.get2()
+    #print("len split", split)
+    #data = dataset.get3()
+    #print("len data", data)
+    #eeg = dataset.getone()
+    #print("self.data[self.split_idx[0]][eeg]:", eeg)
+
+    #label = dataset.gettwo()
+    #print("self.data[self.split_idx[0]][label]:", label)
+
+    #img = dataset.getthree()
+    #print("self.data[self.split_idx[0]][img]:", img)
+    #exit()
+
     # train loop
     for epoch in range(int(start_epoch), int(args.max_epoch)):
         train_sampler.set_epoch(epoch)
@@ -251,20 +270,19 @@ def main_worker(gpu, ngpus_per_node, args):
         cur_stage = cur_stages(epoch, args)
         print("cur_stage " + str(cur_stage)) if args.rank==0 else 0
         print(f"path: {args.path_helper['prefix']}") if args.rank==0 else 0
-        train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict,fixed_z,
-               lr_schedulers)
-        
+        train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, fixed_z, lr_schedulers)
+
         if args.rank == 0 and args.show:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
             save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
             load_params(gen_net, backup_param, args)
-        
-        if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch)-1:
+
+        if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch) - 1:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
             inception_score, fid_score = validate(args, fixed_z, None, epoch, gen_net, writer_dict)
-            if args.rank==0:
+            if args.rank == 0:
                 logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
             load_params(gen_net, backup_param, args)
             if fid_score < best_fid:
@@ -278,7 +296,7 @@ def main_worker(gpu, ngpus_per_node, args):
         avg_gen_net = deepcopy(gen_net)
         load_params(avg_gen_net, gen_avg_param, args)
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                and args.rank == 0):
+                                                    and args.rank == 0):
             save_checkpoint({
                 'epoch': epoch + 1,
                 'gen_model': args.gen_model,
