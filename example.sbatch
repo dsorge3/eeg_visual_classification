@@ -15,16 +15,16 @@ source /home/d.sorge/.bashrc
 conda activate venv
 
 python train_derived.py \
--gen_bs 128 \
--dis_bs 64 \
---dist-url 'tcp://localhost:14256' \
+--gen_batch_size 16 \
+--dis_batch_size 16 \
+--dist-url 'tcp://localhost:10641' \
 --dist-backend 'nccl' \
 --multiprocessing-distributed \
 --world-size 1 \
 --rank 0 \
 --dataset eegdataset \
---bottom_width 8 \
---img_size 32 \
+--bottom_width 2 \
+--img_size 64 \
 --max_iter 500000 \
 --gen_model ViT_custom_rp \
 --dis_model ViT_custom_scale2_rp_noise \
@@ -33,8 +33,8 @@ python train_derived.py \
 --d_depth 3 \
 --g_depth 5,4,2 \
 --dropout 0 \
---latent_dim 256 \
---gf_dim 1024 \
+--latent_dim 128 \
+--gf_dim 256 \
 --num_workers 16 \
 --g_lr 0.0001 \
 --d_lr 0.0001 \
