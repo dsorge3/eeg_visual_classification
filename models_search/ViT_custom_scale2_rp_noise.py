@@ -11,7 +11,7 @@ from utils.utils import make_grid, save_image
 from models_search.ada import *
 import scipy.signal
 from torch_utils.ops import upfirdn2d
-
+# ABBIAMO MODIFICATO windows_size a 0, era a 16
 wavelets = {
     'haar': [0.7071067811865476, 0.7071067811865476],
     'db1':  [0.7071067811865476, 0.7071067811865476],
@@ -93,7 +93,7 @@ class Mlp(nn.Module):
 
 
 class Attention(nn.Module):
-    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., window_size=16):
+    def __init__(self, dim, num_heads=8, qkv_bias=False, qk_scale=None, attn_drop=0., proj_drop=0., window_size=0):
         super().__init__()
         self.num_heads = num_heads
         head_dim = dim // num_heads
@@ -104,7 +104,8 @@ class Attention(nn.Module):
         self.proj = nn.Linear(dim, dim)
         self.proj_drop = nn.Dropout(proj_drop)
         self.mat = matmul()
-        self.window_size = window_size
+        #self.window_size = window_size
+        self.window_size = 0
         self.noise_strength_1 = torch.nn.Parameter(torch.zeros([]))
         if self.window_size != 0:
             self.relative_position_bias_table = nn.Parameter(
@@ -136,6 +137,22 @@ class Attention(nn.Module):
             relative_position_bias = self.relative_position_bias_table[self.relative_position_index.view(-1).clone()].view(
                 self.window_size * self.window_size, self.window_size * self.window_size, -1)  # Wh*Ww,Wh*Ww,nH
             relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
+
+            #print("B: %d N: %d C: %d" %(B, N, C))
+            #print("x:", x.shape)
+            #print("self.noise_strength_1:", self.noise_strength_1)
+            #print("self.qkv(x):", self.qkv(x).shape)
+            #print("self.num_heads:", self.num_heads)
+            #print("qkv:", qkv.shape)
+            #print("q:", q.shape)
+            #print("k:", k.shape)
+            #print("v:", v.shape)
+            #print("self.scale:", self.scale)
+            #print("attn:", attn.shape)
+            #print("self.window_size:", self.window_size)
+            #print("self.relative_position_bias_table:", self.relative_position_bias_table.shape)
+            #print("self.relative_position_index:", self.relative_position_index.shape)
+            #print("relative_position_bias:", relative_position_bias.shape)
             attn = attn + relative_position_bias.unsqueeze(0)
         
         attn = attn.softmax(dim=-1)
@@ -202,11 +219,14 @@ def window_reverse(windows, window_size, H, W):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm, window_size=16):
+                 drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm, window_size=0):
         super().__init__()
         self.norm1 = CustomNorm(norm_layer, dim)
+        #self.attn = Attention(
+         #   dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop,
+            window_size=0)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = CustomNorm(norm_layer, dim)
@@ -220,7 +240,7 @@ class Block(nn.Module):
     
 class StageBlock(nn.Module):
 
-    def __init__(self, depth, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0., drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm, window_size=16):
+    def __init__(self, depth, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0., drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm, window_size=0):
         super().__init__()
         self.depth = depth
         self.block = nn.ModuleList([
@@ -395,11 +415,14 @@ class SpaceToDepth(nn.Module):
 class DisBlock(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=leakyrelu, norm_layer=nn.LayerNorm, window_size=16):
+                 drop_path=0., act_layer=leakyrelu, norm_layer=nn.LayerNorm, window_size=0):
         super().__init__()
         self.norm1 = CustomNorm(norm_layer, dim)
+        #self.attn = Attention(
+         #   dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop,
+            window_size=0)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = CustomNorm(norm_layer, dim)
