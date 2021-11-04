@@ -14,31 +14,34 @@ import cv2
 
 # from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
+
 # from utils.inception_score import get_inception_scorepython exps/dist1_new_church256.py --node 0022 --rank 0sample
 
 logger = logging.getLogger(__name__)
 
+
 def cur_stages(iter, args):
-        """
-        Return current stage.
-        :param epoch: current epoch.
-        :return: current stage
-        """
-        # if search_iter < self.grow_step1:
-        #     return 0
-        # elif self.grow_step1 <= search_iter < self.grow_step2:
-        #     return 1
-        # else:
-        #     return 2
-        # for idx, grow_step in enumerate(args.grow_steps):
-        #     if iter < grow_step:
-        #         return idx
-        # return len(args.grow_steps)
-        idx = 0
-        for i in range(len(args.grow_steps)):
-            if iter >= args.grow_steps[i]:
-                idx = i+1
-        return idx
+    """
+    Return current stage.
+    :param epoch: current epoch.
+    :return: current stage
+    """
+    # if search_iter < self.grow_step1:
+    #     return 0
+    # elif self.grow_step1 <= search_iter < self.grow_step2:
+    #     return 1
+    # else:
+    #     return 2
+    # for idx, grow_step in enumerate(args.grow_steps):
+    #     if iter < grow_step:
+    #         return idx
+    # return len(args.grow_steps)
+    idx = 0
+    for i in range(len(args.grow_steps)):
+        if iter >= args.grow_steps[i]:
+            idx = i + 1
+    return idx
+
 
 def compute_gradient_penalty(D, real_samples, fake_samples, phi):
     """Calculates the gradient penalty loss for WGAN GP"""
@@ -69,28 +72,20 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
     # train mode
     gen_net.train()
     dis_net.train()
-    
+
     dis_optimizer.zero_grad()
     gen_optimizer.zero_grad()
+
     # **MODIFICA3: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
-    #for iter_idx, (imgs, _) in enumerate(tqdm(train_loader)):
     for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
 
         # Adversarial ground truths
         real_imgs = imgs.type(torch.cuda.FloatTensor).cuda(args.gpu, non_blocking=True)
 
-        # Sample noise as generator input
-        #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (imgs.shape[0], args.latent_dim))).cuda(args.gpu, non_blocking=True)
-
         # ---------------------
         #  Train Discriminator
         # ---------------------
-
-        #real_validity = dis_net(real_imgs)
-        #fake_imgs = gen_net(z, epoch).detach()
-        #assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
-        #fake_validity = dis_net(fake_imgs)
 
         real_validity = dis_net(real_imgs)
         fake_imgs = gen_net(eeg, epoch).detach()
@@ -101,7 +96,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         if args.loss == 'hinge':
             d_loss = 0
             d_loss = torch.mean(nn.ReLU(inplace=True)(1.0 - real_validity)) + \
-                    torch.mean(nn.ReLU(inplace=True)(1 + fake_validity))
+                     torch.mean(nn.ReLU(inplace=True)(1 + fake_validity))
         elif args.loss == 'standard':
             real_label = torch.full((imgs.shape[0],), 1., dtype=torch.float, device=real_imgs.get_device())
             fake_label = torch.full((imgs.shape[0],), 0., dtype=torch.float, device=real_imgs.get_device())
@@ -113,14 +108,18 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
             if isinstance(fake_validity, list):
                 d_loss = 0
                 for real_validity_item, fake_validity_item in zip(real_validity, fake_validity):
-                    real_label = torch.full((real_validity_item.shape[0],real_validity_item.shape[1]), 1., dtype=torch.float, device=real_imgs.get_device())
-                    fake_label = torch.full((real_validity_item.shape[0],real_validity_item.shape[1]), 0., dtype=torch.float, device=real_imgs.get_device())
+                    real_label = torch.full((real_validity_item.shape[0], real_validity_item.shape[1]), 1.,
+                                            dtype=torch.float, device=real_imgs.get_device())
+                    fake_label = torch.full((real_validity_item.shape[0], real_validity_item.shape[1]), 0.,
+                                            dtype=torch.float, device=real_imgs.get_device())
                     d_real_loss = nn.MSELoss()(real_validity_item, real_label)
                     d_fake_loss = nn.MSELoss()(fake_validity_item, fake_label)
                     d_loss += d_real_loss + d_fake_loss
             else:
-                real_label = torch.full((real_validity.shape[0],real_validity.shape[1]), 1., dtype=torch.float, device=real_imgs.get_device())
-                fake_label = torch.full((real_validity.shape[0],real_validity.shape[1]), 0., dtype=torch.float, device=real_imgs.get_device())
+                real_label = torch.full((real_validity.shape[0], real_validity.shape[1]), 1., dtype=torch.float,
+                                        device=real_imgs.get_device())
+                fake_label = torch.full((real_validity.shape[0], real_validity.shape[1]), 0., dtype=torch.float,
+                                        device=real_imgs.get_device())
                 d_real_loss = nn.MSELoss()(real_validity, real_label)
                 d_fake_loss = nn.MSELoss()(fake_validity, fake_label)
                 d_loss = d_real_loss + d_fake_loss
@@ -139,9 +138,9 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
             d_loss += (torch.mean(real_validity) ** 2) * 1e-3
         else:
             raise NotImplementedError(args.loss)
-        d_loss = d_loss/float(args.accumulated_times)
+        d_loss = d_loss / float(args.accumulated_times)
         d_loss.backward()
-        
+
         if (iter_idx + 1) % args.accumulated_times == 0:
             torch.nn.utils.clip_grad_norm_(dis_net.parameters(), 5.)
             dis_optimizer.step()
@@ -153,42 +152,44 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         #  Train Generator
         # -----------------
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
-            
+
             for accumulated_idx in range(args.g_accumulated_times):
-                #gen_z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.gen_batch_size, args.latent_dim)))
                 gen_imgs = gen_net(eeg, epoch)
                 fake_validity = dis_net(gen_imgs)
 
                 # cal loss
                 loss_lz = torch.tensor(0)
                 if args.loss == "standard":
-                    real_label = torch.full((args.gen_batch_size,), 1., dtype=torch.float, device=real_imgs.get_device())
+                    real_label = torch.full((args.gen_batch_size,), 1., dtype=torch.float,
+                                            device=real_imgs.get_device())
                     fake_validity = nn.Sigmoid()(fake_validity.view(-1))
                     g_loss = nn.BCELoss()(fake_validity.view(-1), real_label)
                 if args.loss == "lsgan":
                     if isinstance(fake_validity, list):
                         g_loss = 0
                         for fake_validity_item in fake_validity:
-                            real_label = torch.full((fake_validity_item.shape[0],fake_validity_item.shape[1]), 1., dtype=torch.float, device=real_imgs.get_device())
+                            real_label = torch.full((fake_validity_item.shape[0], fake_validity_item.shape[1]), 1.,
+                                                    dtype=torch.float, device=real_imgs.get_device())
                             g_loss += nn.MSELoss()(fake_validity_item, real_label)
                     else:
-                        real_label = torch.full((fake_validity.shape[0],fake_validity.shape[1]), 1., dtype=torch.float, device=real_imgs.get_device())
+                        real_label = torch.full((fake_validity.shape[0], fake_validity.shape[1]), 1., dtype=torch.float,
+                                                device=real_imgs.get_device())
                         # fake_validity = nn.Sigmoid()(fake_validity.view(-1))
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
-                    fake_image1, fake_image2 = gen_imgs[:args.gen_batch_size//2], gen_imgs[args.gen_batch_size//2:]
-                    z_random1, z_random2 = eeg[:args.gen_batch_size//2], eeg[args.gen_batch_size//2:]
+                    fake_image1, fake_image2 = gen_imgs[:args.gen_batch_size // 2], gen_imgs[args.gen_batch_size // 2:]
+                    z_random1, z_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
-                    torch.abs(z_random2 - z_random1))
+                        torch.abs(z_random2 - z_random1))
                     eps = 1 * 1e-5
                     loss_lz = 1 / (lz + eps)
 
                     g_loss = -torch.mean(fake_validity) + loss_lz
                 else:
                     g_loss = -torch.mean(fake_validity)
-                g_loss = g_loss/float(args.g_accumulated_times)
+                g_loss = g_loss / float(args.g_accumulated_times)
                 g_loss.backward()
-            
+
             torch.nn.utils.clip_grad_norm_(gen_net.parameters(), 5.)
             gen_optimizer.step()
             gen_optimizer.zero_grad()
@@ -209,7 +210,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
                 ema_beta = 0.5 ** (float(args.dis_batch_size * args.world_size) / max(ema_nimg, 1e-8))
             else:
                 ema_beta = args.ema
-                
+
             # moving average weight
             for p, avg_p in zip(gen_net.parameters(), gen_avg_param):
                 cpu_p = deepcopy(p)
@@ -222,14 +223,15 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         # verbose
         if gen_step and iter_idx % args.print_freq == 0 and args.rank == 0:
             sample_imgs = torch.cat((gen_imgs[:16], real_imgs[:16]), dim=0)
-#             scale_factor = args.img_size // int(sample_imgs.size(3))
-#             sample_imgs = torch.nn.functional.interpolate(sample_imgs, scale_factor=2)
-#             img_grid = make_grid(sample_imgs, nrow=4, normalize=True, scale_each=True)
-#             save_image(sample_imgs, f'sampled_images_{args.exp_name}.jpg', nrow=4, normalize=True, scale_each=True)
+            #             scale_factor = args.img_size // int(sample_imgs.size(3))
+            #             sample_imgs = torch.nn.functional.interpolate(sample_imgs, scale_factor=2)
+            #             img_grid = make_grid(sample_imgs, nrow=4, normalize=True, scale_each=True)
+            #             save_image(sample_imgs, f'sampled_images_{args.exp_name}.jpg', nrow=4, normalize=True, scale_each=True)
             # writer.add_image(f'sampled_images_{args.exp_name}', img_grid, global_steps)
             tqdm.write(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [ema: %f] " %
-                (epoch, args.max_epoch, iter_idx % len(train_loader), len(train_loader), d_loss.item(), g_loss.item(), ema_beta))
+                (epoch, args.max_epoch, iter_idx % len(train_loader), len(train_loader), d_loss.item(), g_loss.item(),
+                 ema_beta))
             del gen_imgs
             del real_imgs
             del fake_validity
@@ -237,7 +239,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
             del g_loss
             del d_loss
 
-        writer_dict['train_global_steps'] = global_steps + 1 
+        writer_dict['train_global_steps'] = global_steps + 1
 
 
 def get_is(args, gen_net: nn.Module, num_img):
@@ -258,10 +260,11 @@ def get_is(args, gen_net: nn.Module, num_img):
         z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
 
         # Generate a batch of images
-        #gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
-        #img_list.extend(list(gen_imgs))
+        # gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+        # img_list.extend(list(gen_imgs))
 
-        gen_imgs = gen_net(eeg).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+        gen_imgs = gen_net(eeg).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu',
+                                                                                                  torch.uint8).numpy()
         img_list.extend(list(gen_imgs))
 
     # get inception score
@@ -278,58 +281,58 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
     # eval mode
     gen_net.eval()
 
-#     generate images
-#     with torch.no_grad():
-#         sample_imgs = gen_net(fixed_z, epoch)
-#     img_grid = make_grid(sample_imgs, nrow=5, normalize=True, scale_each=True)
+    #     generate images
+    #     with torch.no_grad():
+    #         sample_imgs = gen_net(fixed_z, epoch)
+    #     img_grid = make_grid(sample_imgs, nrow=5, normalize=True, scale_each=True)
 
-#     get fid and inception score
-#     if args.gpu == 0:
-#         fid_buffer_dir = os.path.join(args.path_helper['sample_path'], 'fid_buffer')
-#         os.makedirs(fid_buffer_dir, exist_ok=True) if args.gpu == 0 else 0
+    #     get fid and inception score
+    #     if args.gpu == 0:
+    #         fid_buffer_dir = os.path.join(args.path_helper['sample_path'], 'fid_buffer')
+    #         os.makedirs(fid_buffer_dir, exist_ok=True) if args.gpu == 0 else 0
 
-#     eval_iter = args.num_eval_imgs // args.eval_batch_size
-#     img_list = list()
-#     for iter_idx in tqdm(range(eval_iter), desc='sample images'):
-#         z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
-    
-#         # Generate a batch of images
-#         gen_imgs = gen_net(z, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu',
-#                                                                                                 torch.uint8).numpy()
-#         for img_idx, img in enumerate(gen_imgs):
-#             file_name = os.path.join(fid_buffer_dir, f'iter{iter_idx}_b{img_idx}.png')
-#             imsave(file_name, img)
-#         img_list.extend(list(gen_imgs))
+    #     eval_iter = args.num_eval_imgs // args.eval_batch_size
+    #     img_list = list()
+    #     for iter_idx in tqdm(range(eval_iter), desc='sample images'):
+    #         z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
 
-#     get inception score
+    #         # Generate a batch of images
+    #         gen_imgs = gen_net(z, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu',
+    #                                                                                                 torch.uint8).numpy()
+    #         for img_idx, img in enumerate(gen_imgs):
+    #             file_name = os.path.join(fid_buffer_dir, f'iter{iter_idx}_b{img_idx}.png')
+    #             imsave(file_name, img)
+    #         img_list.extend(list(gen_imgs))
+
+    #     get inception score
     logger.info('=> calculate inception score') if args.rank == 0 else 0
     if args.rank == 0:
-#         mean, std = get_inception_score(img_list)
+        #         mean, std = get_inception_score(img_list)
         mean, std = 0, 0
     else:
         mean, std = 0, 0
     print(f"Inception score: {mean}") if args.rank == 0 else 0
-#     mean, std = 0, 0
+    #     mean, std = 0, 0
     # get fid score
     print('=> calculate fid score') if args.rank == 0 else 0
-    #if args.rank == 0:
+    # if args.rank == 0:
     #    fid_score = get_fid(args, fid_stat, epoch, gen_net, args.num_eval_imgs, args.gen_batch_size, args.eval_batch_size, writer_dict=writer_dict, cls_idx=None)
-    #else:
+    # else:
     #    fid_score = 10000
     # fid_score = 10000
-    #print(f"FID score: {fid_score}") if args.rank == 0 else 0
-    
-#     if args.gpu == 0:
-#         if clean_dir:
-#             os.system('rm -r {}'.format(fid_buffer_dir))
-#         else:
-#             logger.info(f'=> sampled images are saved to {fid_buffer_dir}')
+    # print(f"FID score: {fid_score}") if args.rank == 0 else 0
 
-#     writer.add_image('sampled_images', img_grid, global_steps)
+    #     if args.gpu == 0:
+    #         if clean_dir:
+    #             os.system('rm -r {}'.format(fid_buffer_dir))
+    #         else:
+    #             logger.info(f'=> sampled images are saved to {fid_buffer_dir}')
+
+    #     writer.add_image('sampled_images', img_grid, global_steps)
     if args.rank == 0:
         writer.add_scalar('Inception_score/mean', mean, global_steps)
         writer.add_scalar('Inception_score/std', std, global_steps)
-        #writer.add_scalar('FID_score', fid_score, global_steps)
+        # writer.add_scalar('FID_score', fid_score, global_steps)
 
         writer_dict['valid_global_steps'] = global_steps + 1
 
@@ -337,7 +340,6 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
 
 
 def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
-
     # eval mode
     gen_net.eval()
     with torch.no_grad():
@@ -345,11 +347,12 @@ def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict
         batch_size = fixed_z.size(0)
         sample_imgs = []
         for i in range(fixed_z.size(0)):
-            sample_img = gen_net(fixed_z[i:(i+1)], epoch)
+            sample_img = gen_net(fixed_z[i:(i + 1)], epoch)
             sample_imgs.append(sample_img)
         sample_imgs = torch.cat(sample_imgs, dim=0)
         os.makedirs(f"./samples/{args.exp_name}", exist_ok=True)
-        save_image(sample_imgs, f'./samples/{args.exp_name}/sampled_images_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+        save_image(sample_imgs, f'./samples/{args.exp_name}/sampled_images_{epoch}.png', nrow=10, normalize=True,
+                   scale_each=True)
     return 0
 
 
@@ -414,13 +417,14 @@ class LinearLrDecay(object):
                 param_group['lr'] = lr
         return lr
 
+
 def load_params(model, new_param, args, mode="gpu"):
     if mode == "cpu":
         for p, new_p in zip(model.parameters(), new_param):
             cpu_p = deepcopy(new_p)
             p.data.copy_(cpu_p.cuda().to(f"cuda:{args.gpu}"))
             del cpu_p
-    
+
     else:
         for p, new_p in zip(model.parameters(), new_param):
             p.data.copy_(new_p)
