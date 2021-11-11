@@ -325,34 +325,34 @@ class Generator(nn.Module):
                         norm_layer=norm_layer,
                         window_size=self.window_size
                         )
-        self.blocks_5 = StageBlock(
-                        depth=depth[4],
-                        dim=embed_dim//16, 
-                        num_heads=num_heads, 
-                        mlp_ratio=mlp_ratio, 
-                        qkv_bias=qkv_bias, 
-                        qk_scale=qk_scale,
-                        drop=drop_rate, 
-                        attn_drop=attn_drop_rate, 
-                        drop_path=0, 
-                        act_layer=act_layer,
-                        norm_layer=norm_layer,
-                        window_size=self.window_size
-                        )
-        self.blocks_6 = StageBlock(
-                        depth=depth[5],
-                        dim=embed_dim//64, 
-                        num_heads=num_heads, 
-                        mlp_ratio=mlp_ratio, 
-                        qkv_bias=qkv_bias, 
-                        qk_scale=qk_scale,
-                        drop=drop_rate, 
-                        attn_drop=attn_drop_rate, 
-                        drop_path=0, 
-                        act_layer=act_layer,
-                        norm_layer=norm_layer,
-                        window_size=self.window_size
-                        )
+        #self.blocks_5 = StageBlock(
+        #                depth=depth[4],
+        #                dim=embed_dim//16,
+        #                num_heads=num_heads,
+        #                mlp_ratio=mlp_ratio,
+        #                qkv_bias=qkv_bias,
+        #                qk_scale=qk_scale,
+        #                drop=drop_rate,
+        #                attn_drop=attn_drop_rate,
+        #                drop_path=0,
+        #                act_layer=act_layer,
+        #                norm_layer=norm_layer,
+        #                window_size=self.window_size
+        #                )
+        #self.blocks_6 = StageBlock(
+        #                depth=depth[5],
+        #                dim=embed_dim//64,
+        #                num_heads=num_heads,
+        #                mlp_ratio=mlp_ratio,
+        #                qkv_bias=qkv_bias,
+        #                qk_scale=qk_scale,
+        #                drop=drop_rate,
+        #                attn_drop=attn_drop_rate,
+        #                drop_path=0,
+        #                act_layer=act_layer,
+        #                norm_layer=norm_layer,
+        #                window_size=self.window_size
+        #                )
                                         
         for i in range(len(self.pos_embed)):
             trunc_normal_(self.pos_embed[i], std=.02)
@@ -379,7 +379,7 @@ class Generator(nn.Module):
 #         elif isinstance(m, nn.InstanceNorm1d):
 #             nn.init.constant_(m.bias, 0)
 #             nn.init.constant_(m.weight, 1.0)
-        def forward(self, eeg, epoch):
+    def forward(self, eeg, epoch):
         if self.args.latent_norm:
             latent_size = eeg.size(-1)
             eeg = (eeg/eeg.norm(dim=-1, keepdim=True) * (latent_size ** 0.5))
@@ -390,7 +390,7 @@ class Generator(nn.Module):
             x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.embed_dim)
         elif self.l2_size > 1000:
             x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.l2_size//16)
-            x = self.l2(eeg)
+            x = self.l2(x)
         else:
             x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.l2_size)
             x = self.l2(x)
@@ -443,7 +443,6 @@ class Generator(nn.Module):
         
         output = self.deconv(x)
         return output
-    
 def _downsample(x):
     # Downsample (Mean Avg Pooling with 2x2 kernel)
     return nn.AvgPool2d(kernel_size=2)(x)
