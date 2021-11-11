@@ -2,9 +2,7 @@
 #SBATCH --job-name=VisualImag
 #SBATCH --nodes=1
 #SBATCH --partition=xgpu
-#SBATCH --gres=gpu:tesla:1
-#SBATCH --mem=44000
-#SBATCH --cpus-per-task=8
+#SBATCH --gres=gpu:tesla:4
 #SBATCH --ntasks=4
 #SBATCH --output=slurm-%j-%x.out
 
@@ -15,27 +13,30 @@ source /home/d.sorge/.bashrc
 conda activate venv
 
 python train_derived.py \
---gen_batch_size 16 \
---dis_batch_size 16 \
+-gen_bs 32 \
+-dis_bs 16 \
+--accumulated_times 4 \
+--g_accumulated_times 4 \
 --dist-url 'tcp://localhost:10641' \
 --dist-backend 'nccl' \
 --multiprocessing-distributed \
 --world-size 1 \
 --rank 0 \
 --dataset eegdataset \
---bottom_width 2 \
+--bottom_width 8 \
 --img_size 64 \
 --max_iter 500000 \
---gen_model ViT_custom_rp \
---dis_model ViT_custom_scale2_rp_noise \
+--gen_model ViT_custom_local544444_256_rp \
+--dis_model ViT_scale3_local_new_rp \
+--g_window_size 8 \
+--d_window_size 8 \
+--g_norm pn \
 --df_dim 384 \
---d_heads 4 \
 --d_depth 3 \
---g_depth 5,4,2 \
---dropout 0 \
+--g_depth 5,4,4,4 \
 --latent_dim 128 \
---gf_dim 256 \
---num_workers 16 \
+--gf_dim 1024 \
+--num_workers 0 \
 --g_lr 0.0001 \
 --d_lr 0.0001 \
 --optimizer adam \
@@ -44,17 +45,15 @@ python train_derived.py \
 --beta1 0 \
 --beta2 0.99 \
 --phi 1 \
---eval_batch_size 8 \
+--eval_batch_size 10 \
 --num_eval_imgs 50000 \
 --init_type xavier_uniform \
 --n_critic 4 \
---val_freq 20 \
+--val_freq 10 \
 --print_freq 50 \
 --grow_steps 0 0 \
 --fade_in 0 \
---patch_size 2 \
---ema_kimg 500 \
---ema_warmup 0.1 \
---ema 0.9999 \
---diff_aug translation,cutout,color \
+--patch_size 4 \
+--diff_aug filter,translation,erase_ratio,color,hue \
+--ema 0.995 \
 --exp_name eeg_train
