@@ -21,7 +21,7 @@ class ImageDataset(object):
             ])
             args.n_classes = 0
             train_dataset = Dt(root=args.data_path, train=True, transform=transform, download=True)
-            val_dataset = Dt(root=args.data_path, train=False, transform=transform)
+            val_dataset = Dt(root=args.data_path, train=False, transform=transform, download=True)
 
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
@@ -72,6 +72,7 @@ class ImageDataset(object):
             Dt = EEGDataset
             transform = transforms.Compose([
                 transforms.Resize(size=(img_size, img_size)),
+                transforms.CenterCrop(64),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
