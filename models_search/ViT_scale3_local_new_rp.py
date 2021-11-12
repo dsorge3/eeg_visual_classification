@@ -520,27 +520,38 @@ class Discriminator(nn.Module):
 #         import time
 #         time.sleep(10)
         B, _, H, W = x.size()
+        print("1)X in forward_features", x.size())
+        print("B in forward_features", B)
+        print("_ in forward_features", _)
+        print("H in forward_features", H)
+        print("W in forward_features", W)
         H = W = H//self.patch_size
         
         x_1 = self.fRGB_1(x).flatten(2).permute(0,2,1)
         x_2 = self.fRGB_2(x).flatten(2).permute(0,2,1)
         x_3 = self.fRGB_3(x).flatten(2).permute(0,2,1)
+        print("X_1 in forward_features", x_1.size())
+        print("X_2 in forward_features", x_2.size())
+        print("X_3 in forward_features", x_3.size())
 #         x_4 = self.fRGB_4(nn.AvgPool2d(8)(x)).flatten(2).permute(0,2,1)
         B = x.shape[0]
-        
 
         x = x_1 + self.pos_embed_1
+        print("2) X in forward_features", x.size())
         B, _, C = x.size()
         x = x.view(B, H, W, C)
         x = window_partition(x, self.window_size)
         x = x.view(-1, self.window_size*self.window_size, C)
+        print("X in forward_features", x.size())
         for blk in self.blocks_1:
             x = blk(x)
+            print("1) blk(x) in forward_features", x.size())
         x = x.view(-1, self.window_size, self.window_size, C)
         x = window_reverse(x, self.window_size, H, W).view(B,H*W,C)
+        print("X in forward_features", x.size())
         for blk in self.blocks_11:
             x = blk(x)
-            
+            print("2) blk(x) in forward_features", x.size())
         _, _, C = x.shape
         x = x.permute(0, 2, 1).view(B, C, H, W)
 #         x = SpaceToDepth(2)(x)
@@ -549,6 +560,7 @@ class Discriminator(nn.Module):
         x = x.flatten(2).permute(0, 2, 1)
         x = torch.cat([x, x_2], dim=-1)
         x = x + self.pos_embed_2
+        print("3) X in forward_features", x.size())
         
         for blk in self.blocks_2:
             x = blk(x)
@@ -561,6 +573,7 @@ class Discriminator(nn.Module):
         x = x.flatten(2).permute(0, 2, 1)
         x = torch.cat([x, x_3], dim=-1)
         x = x + self.pos_embed_3
+        print("4) X in forward_features", x.size())
         
         for blk in self.blocks_3:
             x = blk(x)
@@ -581,6 +594,7 @@ class Discriminator(nn.Module):
         x = torch.cat((cls_tokens, x), dim=1)
         x = self.last_block(x)
         x = self.norm(x)
+        print("5) X in forward_features", x.size())
         return x[:,0]
 
     def forward(self, x):
