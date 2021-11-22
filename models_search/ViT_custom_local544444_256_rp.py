@@ -236,6 +236,7 @@ class Generator(nn.Module):
         self.bottom_width = args.bottom_width
         self.embed_dim = embed_dim = args.gf_dim
         self.window_size = args.g_window_size
+        self.latent_dim = args.latent_dim
         norm_layer = args.g_norm
         mlp_ratio = args.g_mlp
         depth = [int(i) for i in args.g_depth.split(",")]
@@ -257,16 +258,16 @@ class Generator(nn.Module):
         self.pos_embed_2 = nn.Parameter(torch.zeros(1, (self.bottom_width*2)**2, embed_dim))
         self.pos_embed_3 = nn.Parameter(torch.zeros(1, (self.bottom_width*4)**2, embed_dim))
         self.pos_embed_4 = nn.Parameter(torch.zeros(1, (self.bottom_width*8)**2, embed_dim//4))
-        self.pos_embed_5 = nn.Parameter(torch.zeros(1, (self.bottom_width*16)**2, embed_dim//16))
-        self.pos_embed_6 = nn.Parameter(torch.zeros(1, (self.bottom_width*32)**2, embed_dim//64))
+        #self.pos_embed_5 = nn.Parameter(torch.zeros(1, (self.bottom_width*16)**2, embed_dim//16))
+        #self.pos_embed_6 = nn.Parameter(torch.zeros(1, (self.bottom_width*32)**2, embed_dim//64))
                                         
         self.pos_embed = [
             self.pos_embed_1,
             self.pos_embed_2,
             self.pos_embed_3,
             self.pos_embed_4,
-            self.pos_embed_5,
-            self.pos_embed_6
+            #self.pos_embed_5,
+            #self.pos_embed_6
         ]
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth[0])]  # stochastic depth decay rule
         self.blocks_1 = StageBlock(
@@ -323,7 +324,7 @@ class Generator(nn.Module):
                         drop_path=0, 
                         act_layer=act_layer,
                         norm_layer=norm_layer,
-                        window_size=self.window_size
+                        window_size=16
                         )
         #self.blocks_5 = StageBlock(
         #                depth=depth[4],
@@ -357,7 +358,7 @@ class Generator(nn.Module):
         for i in range(len(self.pos_embed)):
             trunc_normal_(self.pos_embed[i], std=.02)
         self.deconv = nn.Sequential(
-            nn.Conv2d(self.embed_dim//64, 3, 1, 1, 0)
+            nn.Conv2d(self.embed_dim//4, 3, 1, 1, 0)
         )
 #         self.apply(self._init_weights)
     
@@ -380,6 +381,7 @@ class Generator(nn.Module):
 #             nn.init.constant_(m.bias, 0)
 #             nn.init.constant_(m.weight, 1.0)
     def forward(self, eeg, epoch):
+        eeg = eeg.view(-1, self.latent_dim)
         if self.args.latent_norm:
             latent_size = eeg.size(-1)
             eeg = (eeg/eeg.norm(dim=-1, keepdim=True) * (latent_size ** 0.5))
@@ -393,13 +395,12 @@ class Generator(nn.Module):
             x = self.l2(x)
         else:
             x = self.l1(eeg).view(-1, self.bottom_width ** 2, self.l2_size)
-            x = self.l2(x)
-            
-        x = x + self.pos_embed[0]
+            x = self.l2(x)   
+        x = x + self.pos_embed[0]   
         B = x.size()
         H, W = self.bottom_width, self.bottom_width
-        x = self.blocks_1(x)
-        
+        x = self.blocks_1(x)   
+
         x, H, W = bicubic_upsample(x, H, W)
         x = x + self.pos_embed[1]
         B, _, C = x.size()
@@ -418,8 +419,9 @@ class Generator(nn.Module):
         x = x.view(-1, self.window_size*self.window_size, C)
         x = self.blocks_4(x)
         x = x.view(-1, self.window_size, self.window_size, C)
-        x = window_reverse(x, self.window_size, H, W).view(B,H*W,C)
-            
+        x = window_reverse(x, self.window_size, H, W).view(B,H,W,C).permute(0,3,1,2)
+
+        """    
         x, H, W = pixel_upsample(x, H, W)
         x = x + self.pos_embed[4]
         B, _, C = x.size()
@@ -439,7 +441,7 @@ class Generator(nn.Module):
         x = self.blocks_6(x)
         x = x.view(-1, self.window_size, self.window_size, C)
         x = window_reverse(x, self.window_size, H, W).view(B,H,W,C).permute(0,3,1,2)
-        
+        """
         
         output = self.deconv(x)
         return output
