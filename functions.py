@@ -78,10 +78,17 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
 
     # **MODIFICA3: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
     for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
+    #for iter_idx, (imgs, _) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
+
+        #print("EEG", eeg.shape)
+        #print("IMG", imgs.shape)
 
         # Adversarial ground truths
         real_imgs = imgs.type(torch.cuda.FloatTensor).cuda(args.gpu, non_blocking=True)
+
+        # Sample noise as generator input
+        #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (imgs.shape[0], args.latent_dim))).cuda(args.gpu, non_blocking=True)
 
         # ---------------------
         #  Train Discriminator
@@ -89,6 +96,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
 
         real_validity = dis_net(real_imgs)
         fake_imgs = gen_net(eeg, epoch).detach()
+        #fake_imgs = gen_net(z, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
 
@@ -154,8 +162,10 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
 
             for accumulated_idx in range(args.g_accumulated_times):
-                gen_imgs = gen_net(eeg, epoch)
-                fake_validity = dis_net(gen_imgs)
+                gen_eeg = gen_net(eeg, epoch)
+                fake_validity = dis_net(gen_eeg)
+                #gen_z = gen_net(z, epoch)
+                #fake_validity = dis_net(gen_z)
 
                 # cal loss
                 loss_lz = torch.tensor(0)
@@ -177,8 +187,10 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
                         # fake_validity = nn.Sigmoid()(fake_validity.view(-1))
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
-                    fake_image1, fake_image2 = gen_imgs[:args.gen_batch_size // 2], gen_imgs[args.gen_batch_size // 2:]
+                    fake_image1, fake_image2 = gen_eeg[:args.gen_batch_size // 2], gen_eeg[args.gen_batch_size // 2:]
+                    #fake_image1, fake_image2 = gen_z[:args.gen_batch_size // 2], gen_z[args.gen_batch_size // 2:]
                     z_random1, z_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
+                    #z_random1, z_random2 = z[:args.gen_batch_size // 2], z[args.gen_batch_size // 2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
                         torch.abs(z_random2 - z_random1))
                     eps = 1 * 1e-5
@@ -222,7 +234,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
 
         # verbose
         if gen_step and iter_idx % args.print_freq == 0 and args.rank == 0:
-            sample_imgs = torch.cat((gen_imgs[:16], real_imgs[:16]), dim=0)
+            #sample_imgs = torch.cat((gen_imgs[:16], real_imgs[:16]), dim=0)
+            sample_imgs = torch.cat((gen_eeg[:16], real_imgs[:16]), dim=0)
             #             scale_factor = args.img_size // int(sample_imgs.size(3))
             #             sample_imgs = torch.nn.functional.interpolate(sample_imgs, scale_factor=2)
             #             img_grid = make_grid(sample_imgs, nrow=4, normalize=True, scale_each=True)
@@ -232,7 +245,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [ema: %f] " %
                 (epoch, args.max_epoch, iter_idx % len(train_loader), len(train_loader), d_loss.item(), g_loss.item(),
                  ema_beta))
-            del gen_imgs
+            del gen_eeg
             del real_imgs
             del fake_validity
             del real_validity
@@ -242,7 +255,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         writer_dict['train_global_steps'] = global_steps + 1
 
 
-def get_is(args, gen_net: nn.Module, num_img):
+#def get_is(args, gen_net: nn.Module, num_img):
+def get_is(args, gen_net: nn.Module, train_loader, epoch):
     """
     Get inception score.
     :param args:
@@ -254,17 +268,24 @@ def get_is(args, gen_net: nn.Module, num_img):
     # eval mode
     gen_net = gen_net.eval()
 
-    eval_iter = num_img // args.eval_batch_size
+    #eval_iter = num_img // args.eval_batch_size
+    eval_iter = args.num_eval_imgs // args.eval_batch_size
     img_list = list()
-    for _ in range(eval_iter):
-        z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
+    dataloader_iterator = iter(train_loader)
+    for _ in tqdm(range(eval_iter)):
+        #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
 
         # Generate a batch of images
         # gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
         # img_list.extend(list(gen_imgs))
 
-        gen_imgs = gen_net(eeg).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu',
-                                                                                                  torch.uint8).numpy()
+        try:
+            eeg, label, img = next(dataloader_iterator)
+        except StopIteration:
+            dataloader_iterator = iter(train_loader)
+            eeg, label, img = next(dataloader_iterator)
+
+        gen_imgs = gen_net(eeg, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
         img_list.extend(list(gen_imgs))
 
     # get inception score
@@ -281,34 +302,33 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
     # eval mode
     gen_net.eval()
 
-    #     generate images
-    #     with torch.no_grad():
-    #         sample_imgs = gen_net(fixed_z, epoch)
-    #     img_grid = make_grid(sample_imgs, nrow=5, normalize=True, scale_each=True)
+    #   generate images
+    with torch.no_grad():
+        sample_imgs = gen_net(fixed_z, epoch)
+    img_grid = make_grid(sample_imgs, nrow=5, normalize=True, scale_each=True)
 
-    #     get fid and inception score
-    #     if args.gpu == 0:
-    #         fid_buffer_dir = os.path.join(args.path_helper['sample_path'], 'fid_buffer')
-    #         os.makedirs(fid_buffer_dir, exist_ok=True) if args.gpu == 0 else 0
+    #   get fid and inception score
+    if args.gpu == 0:
+        fid_buffer_dir = os.path.join(args.path_helper['sample_path'], 'fid_buffer')
+        os.makedirs(fid_buffer_dir, exist_ok=True) if args.gpu == 0 else 0
 
-    #     eval_iter = args.num_eval_imgs // args.eval_batch_size
-    #     img_list = list()
-    #     for iter_idx in tqdm(range(eval_iter), desc='sample images'):
-    #         z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
+    eval_iter = args.num_eval_imgs // args.eval_batch_size
+    img_list = list()
+    for iter_idx in tqdm(range(eval_iter), desc='sample images'):
+    #   z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
 
-    #         # Generate a batch of images
-    #         gen_imgs = gen_net(z, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu',
-    #                                                                                                 torch.uint8).numpy()
-    #         for img_idx, img in enumerate(gen_imgs):
-    #             file_name = os.path.join(fid_buffer_dir, f'iter{iter_idx}_b{img_idx}.png')
-    #             imsave(file_name, img)
-    #         img_list.extend(list(gen_imgs))
+        # Generate a batch of images
+        gen_imgs = gen_net(fixed_z, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+    #   gen_imgs = gen_net(z, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+    #   for img_idx, img in enumerate(gen_imgs):
+    #       file_name = os.path.join(fid_buffer_dir, f'iter{iter_idx}_b{img_idx}.png')
+    #       imsave(file_name, img)
+        img_list.extend(list(gen_imgs))
 
     #     get inception score
     logger.info('=> calculate inception score') if args.rank == 0 else 0
     if args.rank == 0:
-        #         mean, std = get_inception_score(img_list)
-        mean, std = 0, 0
+        mean, std = get_inception_score(img_list)
     else:
         mean, std = 0, 0
     print(f"Inception score: {mean}") if args.rank == 0 else 0
