@@ -15,7 +15,6 @@ tf.disable_v2_behavior()
 from six.moves import urllib
 from tqdm import tqdm
 
-
 os.environ['TF_CPP_MIN_LOG_LEVEL'] = '3'
 MODEL_DIR = '/tmp/imagenet'
 DATA_URL = 'http://download.tensorflow.org/models/image/imagenet/inception-2015-12-05.tgz'
@@ -39,24 +38,25 @@ def get_inception_score(images, splits=10):
         img = img.astype(np.float32)
         inps.append(np.expand_dims(img, 0))
     bs = 128
-    with tf.Session(config=config) as sess:
-        preds = []
-        n_batches = int(math.ceil(float(len(inps)) / float(bs)))
-        for i in tqdm(range(n_batches), desc="Calculate inception score"):
-            sys.stdout.flush()
-            inp = inps[(i * bs):min((i + 1) * bs, len(inps))]
-            inp = np.concatenate(inp, 0)
-            pred = sess.run(softmax, {'ExpandDims:0': inp})
-            preds.append(pred)
-        preds = np.concatenate(preds, 0)
-        scores = []
-        for i in range(splits):
-            part = preds[(i * preds.shape[0] // splits):((i + 1) * preds.shape[0] // splits), :]
-            kl = part * (np.log(part) - np.log(np.expand_dims(np.mean(part, 0), 0)))
-            kl = np.mean(np.sum(kl, 1))
-            scores.append(np.exp(kl))
+    #with tf.Session(config=config) as sess:
+    preds = []
+    n_batches = int(math.ceil(float(len(inps)) / float(bs)))
+    for i in tqdm(range(n_batches), desc="Calculate inception score"):
+        sys.stdout.flush()
+        inp = inps[(i * bs):min((i + 1) * bs, len(inps))]
+        inp = np.concatenate(inp, 0)
+        #pred = sess.run(softmax, {'ExpandDims:0': inp})
+        #preds.append(pred)
+        preds.append(inp)
+    preds = np.concatenate(preds, 0)
+    scores = []
+    for i in range(splits):
+        part = preds[(i * preds.shape[0] // splits):((i + 1) * preds.shape[0] // splits), :]
+        kl = part * (np.log(part) - np.log(np.expand_dims(np.mean(part, 0), 0)))
+        kl = np.mean(np.sum(kl, 1))
+        scores.append(np.exp(kl))
 
-        sess.close()
+        #sess.close()
     return np.mean(scores), np.std(scores)
 
 
