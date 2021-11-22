@@ -11,7 +11,7 @@ from utils.utils import make_grid, save_image
 from models_search.ada import *
 import scipy.signal
 from torch_utils.ops import upfirdn2d
-
+# ABBIAMO MODIFICATO windows_size a 0, era a 16
 wavelets = {
     'haar': [0.7071067811865476, 0.7071067811865476],
     'db1':  [0.7071067811865476, 0.7071067811865476],
@@ -105,6 +105,7 @@ class Attention(nn.Module):
         self.proj_drop = nn.Dropout(proj_drop)
         self.mat = matmul()
         self.window_size = window_size
+        self.noise_strength_1 = torch.nn.Parameter(torch.zeros([]))
         if self.window_size != 0:
             self.relative_position_bias_table = nn.Parameter(
                 torch.zeros((2 * window_size - 1) * (2 * window_size - 1), num_heads))  # 2*Wh-1 * 2*Ww-1, nH
@@ -121,11 +122,13 @@ class Attention(nn.Module):
             relative_coords[:, :, 0] *= 2 * window_size - 1
             relative_position_index = relative_coords.sum(-1)  # Wh*Ww, Wh*Ww
             self.register_buffer("relative_position_index", relative_position_index)
+            
 
             trunc_normal_(self.relative_position_bias_table, std=.02)
         
     def forward(self, x):
         B, N, C = x.shape
+        x = x + torch.randn([x.size(0), x.size(1), 1], device=x.device) * self.noise_strength_1
         qkv = self.qkv(x).reshape(B, N, 3, self.num_heads, C // self.num_heads).permute(2, 0, 3, 1, 4)
         q, k, v = qkv[0], qkv[1], qkv[2]   # make torchscript happy (cannot use tensor as tuple)
         attn = (self.mat(q, k.transpose(-2, -1))) * self.scale
@@ -134,7 +137,22 @@ class Attention(nn.Module):
                 self.window_size * self.window_size, self.window_size * self.window_size, -1)  # Wh*Ww,Wh*Ww,nH
             relative_position_bias = relative_position_bias.permute(2, 0, 1).contiguous()  # nH, Wh*Ww, Wh*Ww
             attn = attn + relative_position_bias.unsqueeze(0)
-        
+            #print("B: %d N: %d C: %d" %(B, N, C))
+            #print("x:", x.shape)
+            #print("self.noise_strength_1:", self.noise_strength_1)
+            #print("self.qkv(x):", self.qkv(x).shape)
+            #print("self.num_heads:", self.num_heads)
+            #print("qkv:", qkv.shape)
+            #print("q:", q.shape)
+            #print("k:", k.shape)
+            #print("v:", v.shape)
+            #print("self.scale:", self.scale)
+            #print("attn:", attn.shape)
+            #print("self.window_size:", self.window_size)
+            #print("self.relative_position_bias_table:", self.relative_position_bias_table.shape)
+            #print("self.relative_position_index:", self.relative_position_index.shape)
+            #print("relative_position_bias:", relative_position_bias.shape)
+
         attn = attn.softmax(dim=-1)
         attn = self.attn_drop(attn)
         x = self.mat(attn, v).transpose(1, 2).reshape(B, N, C)
@@ -199,11 +217,11 @@ def window_reverse(windows, window_size, H, W):
 class Block(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm):
+                 drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm, window_size=16):
         super().__init__()
         self.norm1 = CustomNorm(norm_layer, dim)
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop)
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = CustomNorm(norm_layer, dim)
@@ -217,7 +235,7 @@ class Block(nn.Module):
     
 class StageBlock(nn.Module):
 
-    def __init__(self, depth, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0., drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm):
+    def __init__(self, depth, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0., drop_path=0., act_layer=gelu, norm_layer=nn.LayerNorm, window_size=16):
         super().__init__()
         self.depth = depth
         self.block = nn.ModuleList([
@@ -231,7 +249,8 @@ class StageBlock(nn.Module):
                         attn_drop=attn_drop, 
                         drop_path=drop_path, 
                         act_layer=act_layer,
-                        norm_layer=norm_layer
+                        norm_layer=norm_layer,
+                        window_size=window_size,
                         ) for i in range(depth)])
 
     def forward(self, x):
@@ -284,7 +303,8 @@ class Generator(nn.Module):
                         attn_drop=attn_drop_rate, 
                         drop_path=0,
                         act_layer=act_layer,
-                        norm_layer=norm_layer
+                        norm_layer=norm_layer,
+                        window_size=8,
                         )
         self.upsample_blocks = nn.ModuleList([
                     StageBlock(
@@ -298,7 +318,8 @@ class Generator(nn.Module):
                         attn_drop=attn_drop_rate, 
                         drop_path=0, 
                         act_layer=act_layer,
-                        norm_layer=norm_layer
+                        norm_layer=norm_layer,
+                        window_size=16,
                         ),
                     StageBlock(
                         depth=depth[2],
@@ -311,7 +332,8 @@ class Generator(nn.Module):
                         attn_drop=attn_drop_rate, 
                         drop_path=0,
                         act_layer=act_layer,
-                        norm_layer=norm_layer
+                        norm_layer=norm_layer,
+                        window_size=32,
                         )
                     ])
         for i in range(len(self.pos_embed)):
@@ -388,11 +410,14 @@ class SpaceToDepth(nn.Module):
 class DisBlock(nn.Module):
 
     def __init__(self, dim, num_heads, mlp_ratio=4., qkv_bias=False, qk_scale=None, drop=0., attn_drop=0.,
-                 drop_path=0., act_layer=leakyrelu, norm_layer=nn.LayerNorm, window_size=16):
+                 drop_path=0., act_layer=leakyrelu, norm_layer=nn.LayerNorm, window_size=0):
         super().__init__()
         self.norm1 = CustomNorm(norm_layer, dim)
+        #self.attn = Attention(
+         #   dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
         self.attn = Attention(
-            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop, window_size=window_size)
+            dim, num_heads=num_heads, qkv_bias=qkv_bias, qk_scale=qk_scale, attn_drop=attn_drop, proj_drop=drop,
+            window_size=0)
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
         self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
         self.norm2 = CustomNorm(norm_layer, dim)
@@ -440,12 +465,12 @@ class Discriminator(nn.Module):
         self.blocks_1 = nn.ModuleList([
             DisBlock(
                 dim=embed_dim//4*3, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, act_layer=act_layer, norm_layer=norm_layer, window_size=args.bottom_width*4//2)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, act_layer=act_layer, norm_layer=norm_layer, window_size=args.bottom_width*4)
             for i in range(depth)])
         self.blocks_2 = nn.ModuleList([
             DisBlock(
                 dim=embed_dim, num_heads=num_heads, mlp_ratio=mlp_ratio, qkv_bias=qkv_bias, qk_scale=qk_scale,
-                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, act_layer=act_layer, norm_layer=norm_layer, window_size=args.bottom_width*4//4)
+                drop=drop_rate, attn_drop=attn_drop_rate, drop_path=0, act_layer=act_layer, norm_layer=norm_layer, window_size=args.bottom_width*4)
             for i in range(depth)])
         
         self.last_block = nn.Sequential(
