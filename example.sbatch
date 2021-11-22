@@ -13,7 +13,7 @@ source /home/d.sorge/.bashrc
 conda activate venv
 
 python train_derived.py \
--gen_bs 32 \
+-gen_bs 16 \
 -dis_bs 16 \
 --accumulated_times 4 \
 --g_accumulated_times 4 \
@@ -27,15 +27,15 @@ python train_derived.py \
 --img_size 64 \
 --max_iter 500000 \
 --gen_model ViT_custom_local544444_256_rp \
---dis_model ViT_scale3_local_new_rp \
---g_window_size 8 \
---d_window_size 8 \
+--dis_model ViT_sclae2_copy \
+--g_window_size 16 \
+--d_window_size 16 \
 --g_norm pn \
 --df_dim 384 \
 --d_depth 3 \
---g_depth 5,4,4,4 \
---latent_dim 128 \
---gf_dim 1024 \
+--g_depth 5,4,2,2 \
+--latent_dim 56320 \
+--gf_dim 256 \
 --num_workers 0 \
 --g_lr 0.0001 \
 --d_lr 0.0001 \
@@ -53,7 +53,7 @@ python train_derived.py \
 --print_freq 50 \
 --grow_steps 0 0 \
 --fade_in 0 \
---patch_size 4 \
+--patch_size 2 \
 --diff_aug filter,translation,erase_ratio,color,hue \
 --ema 0.995 \
 --exp_name eeg_train
