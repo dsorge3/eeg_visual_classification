@@ -5,10 +5,13 @@ from __future__ import print_function
 import cfg
 import models_search
 import datasets
-from functions import train, validate, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
+from functions import train, validate, get_is, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
 from utils.utils import set_log_dir, save_checkpoint, create_logger
 from utils.inception_score import _init_inception
 from utils.fid_score import create_inception_graph, check_or_download_inception
+
+from pytorch_gan_metrics.utils import ImageData, get_inception_score_and_fid
+from torch.utils.data import DataLoader
 
 import torch
 import torch.multiprocessing as mp
@@ -121,11 +124,11 @@ def main_worker(gpu, ngpus_per_node, args):
         if args.gpu is not None:
             
             torch.cuda.set_device(args.gpu)
-            #gen_net = eval('models_search.'+args.gen_model+'.Generator')(args=args)
-            #dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
+            gen_net = eval('models_search.'+args.gen_model+'.Generator')(args=args)
+            dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
 
-            #gen_net.apply(weights_init)
-            #dis_net.apply(weights_init)
+            gen_net.apply(weights_init)
+            dis_net.apply(weights_init)
             gen_net.cuda(args.gpu)
             dis_net.cuda(args.gpu)
             # When using a single GPU per process and per
@@ -247,6 +250,9 @@ def main_worker(gpu, ngpus_per_node, args):
     }
 
     #dataset = EEGDataset(args.eeg_dataset, args.splits_path, args.split_num)
+    #eeg, label, img = dataset.__getitem__(0)
+    #print("EEG", eeg.shape)
+    #rint("IMG", img.size)
     #lentr = dataset.get()
     #print("len trSet", lentr)
     #split = dataset.get2()
@@ -277,21 +283,35 @@ def main_worker(gpu, ngpus_per_node, args):
             load_params(gen_net, gen_avg_param, args, mode="cpu")
             save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
             load_params(gen_net, backup_param, args)
-
+        """
         if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch) - 1:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
-            inception_score, fid_score = validate(args, fixed_z, None, epoch, gen_net, writer_dict)
+            #inception_score, fid_score = validate(args, fixed_z, None, epoch, gen_net, writer_dict)
+            inception_score = get_is(args, gen_net, train_loader, epoch)
             if args.rank == 0:
-                logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
+                #logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
+                logger.info(f'Inception score: {inception_score} || @ epoch {epoch}.')
             load_params(gen_net, backup_param, args)
-            if fid_score < best_fid:
-                best_fid = fid_score
-                is_best = True
-            else:
-                is_best = False
+            #if fid_score < best_fid:
+            #    best_fid = fid_score
+            #    is_best = True
+            #else:
+            #    is_best = False
         else:
             is_best = False
+        """
+        backup_param = copy_params(gen_net)
+        load_params(gen_net, gen_avg_param, args, mode="cpu")
+        
+        #**** NEW ****
+        data = ImageData(args.path, exts=['png', 'jpg'])
+        loader = DataLoader(data, batch_size=50, num_workers=4)
+        IS, IS_std = get_inception_score_and_fid(loader, use_torch=args.use_torch, verbose=True)
+        print(IS, IS_std)
+        
+        load_params(gen_net, backup_param, args)
+        is_best = False
 
         avg_gen_net = deepcopy(gen_net)
         load_params(avg_gen_net, gen_avg_param, args)
