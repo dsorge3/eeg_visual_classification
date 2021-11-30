@@ -4,7 +4,6 @@ import torchvision.transforms as transforms
 from torch.utils.data import Dataset
 from celeba import CelebA, FFHQ
 from eegDatasetClass import EEGDataset
-from splitterClass import Splitter
 import torch.distributed as dist
 
 class ImageDataset(object):
@@ -71,6 +70,7 @@ class ImageDataset(object):
         elif args.dataset.lower() == 'eegdataset':      # **MODIFICA1: IMPORT EEGDataset and Splitter CLASS**
             Dt = EEGDataset
             transform = transforms.Compose([
+                transforms.ToPILImage(),
                 transforms.Resize(size=(img_size, img_size)),
                 transforms.CenterCrop(64),
                 transforms.RandomHorizontalFlip(),
