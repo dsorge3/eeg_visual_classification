@@ -3,10 +3,9 @@ import torch; torch.utils.backcompat.broadcast_warning.enabled = True
 import torch.optim
 import torch.backends.cudnn as cudnn;
 cudnn.benchmark = True
-import cv2
 import cfg
 import numpy as np
-
+import cv2
 args = cfg.parse_args()
 
 # Dataset class
@@ -58,10 +57,14 @@ class EEGDataset:
             img = Image.fromarray(img.squeeze(0).transpose(1, 2, 0))
         else:
             img = Image.open(imgPath)
+            img = np.asarray(img)
 
-        # apply the transforms on the image
+        if len(img.shape) < 3:
+            img = np.expand_dims(img, -1)
+            img = np.concatenate((img, img, img), axis=-1)
+
+        #apply the transforms on the image
         if self.transform is not None:
             img = self.transform(img)
-        #img = cv2.imread(imgPath, cv2.IMREAD_COLOR)
         # Return
         return eeg, label, img
