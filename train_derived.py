@@ -10,7 +10,7 @@ from utils.utils import set_log_dir, save_checkpoint, create_logger
 from utils.inception_score import _init_inception
 from utils.fid_score import create_inception_graph, check_or_download_inception
 
-from pytorch_gan_metrics.utils import ImageData, get_inception_score_and_fid
+from pytorch_gan_metrics.utils import ImageData, get_inception_score_and_fid, get_inception_score, get_inception_score_from_directory
 from torch.utils.data import DataLoader
 
 import torch
@@ -277,13 +277,26 @@ def main_worker(gpu, ngpus_per_node, args):
         print("cur_stage " + str(cur_stage)) if args.rank==0 else 0
         print(f"path: {args.path_helper['prefix']}") if args.rank==0 else 0
         train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, fixed_z, lr_schedulers)
+        
+        backup_param = copy_params(gen_net)
+        load_params(gen_net, gen_avg_param, args, mode="cpu")
+        save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
+        load_params(gen_net, backup_param, args)
+        
+        backup_param = copy_params(gen_net)
+        load_params(gen_net, gen_avg_param, args, mode="cpu")
+        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/trainingOutput/outputEpoch{epoch}')
+        print("Inception Score Epoch", epoch, ":", IS)
+        load_params(gen_net, backup_param, args)
+        is_best = False
 
+        """
         if args.rank == 0 and args.show:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
             save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
             load_params(gen_net, backup_param, args)
-        """
+        
         if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch) - 1:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
@@ -301,19 +314,8 @@ def main_worker(gpu, ngpus_per_node, args):
         else:
             is_best = False
         """
-        backup_param = copy_params(gen_net)
-        load_params(gen_net, gen_avg_param, args, mode="cpu")
-        
-        #**** NEW ****
-        data = ImageData(args.path, exts=['png', 'jpg'])
-        loader = DataLoader(data, batch_size=50, num_workers=4)
-        IS, IS_std = get_inception_score_and_fid(loader, use_torch=args.use_torch, verbose=True)
-        print(IS, IS_std)
-        
-        load_params(gen_net, backup_param, args)
-        is_best = False
 
-        avg_gen_net = deepcopy(gen_net)
+        avg_gen_net = deepcopy(gen_net).cpu()
         load_params(avg_gen_net, gen_avg_param, args)
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                                                     and args.rank == 0):
