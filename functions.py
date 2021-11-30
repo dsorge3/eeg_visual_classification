@@ -4,16 +4,27 @@ import os
 from copy import deepcopy
 
 import numpy as np
+import tensorflow as tf
 import torch
 import torch.nn as nn
 from imageio import imsave
-from utils.inception_score import get_inception_score
+#from utils.inception_score import get_inception_score
 from utils.utils import make_grid, save_image
 from tqdm import tqdm
 import cv2
 
+from pytorch_gan_metrics.utils import get_inception_score
+
 # from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
+
+from torch.utils.data import DataLoader
+
+from torchvision import transforms
+
+preprocess = transforms.Compose([
+    transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+])
 
 # from utils.inception_score import get_inception_scorepython exps/dist1_new_church256.py --node 0022 --rank 0sample
 
@@ -78,17 +89,10 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
 
     # **MODIFICA3: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
     for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
-    #for iter_idx, (imgs, _) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
-
-        #print("EEG", eeg.shape)
-        #print("IMG", imgs.shape)
 
         # Adversarial ground truths
         real_imgs = imgs.type(torch.cuda.FloatTensor).cuda(args.gpu, non_blocking=True)
-
-        # Sample noise as generator input
-        #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (imgs.shape[0], args.latent_dim))).cuda(args.gpu, non_blocking=True)
 
         # ---------------------
         #  Train Discriminator
@@ -96,7 +100,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
 
         real_validity = dis_net(real_imgs)
         fake_imgs = gen_net(eeg, epoch).detach()
-        #fake_imgs = gen_net(z, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
 
@@ -164,8 +167,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
             for accumulated_idx in range(args.g_accumulated_times):
                 gen_eeg = gen_net(eeg, epoch)
                 fake_validity = dis_net(gen_eeg)
-                #gen_z = gen_net(z, epoch)
-                #fake_validity = dis_net(gen_z)
 
                 # cal loss
                 loss_lz = torch.tensor(0)
@@ -188,11 +189,9 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
                     fake_image1, fake_image2 = gen_eeg[:args.gen_batch_size // 2], gen_eeg[args.gen_batch_size // 2:]
-                    #fake_image1, fake_image2 = gen_z[:args.gen_batch_size // 2], gen_z[args.gen_batch_size // 2:]
-                    z_random1, z_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
-                    #z_random1, z_random2 = z[:args.gen_batch_size // 2], z[args.gen_batch_size // 2:]
+                    eeg_random1, eeg_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
-                        torch.abs(z_random2 - z_random1))
+                        torch.abs(eeg_random2 - eeg_random1))
                     eps = 1 * 1e-5
                     loss_lz = 1 / (lz + eps)
 
@@ -234,7 +233,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
 
         # verbose
         if gen_step and iter_idx % args.print_freq == 0 and args.rank == 0:
-            #sample_imgs = torch.cat((gen_imgs[:16], real_imgs[:16]), dim=0)
             sample_imgs = torch.cat((gen_eeg[:16], real_imgs[:16]), dim=0)
             #             scale_factor = args.img_size // int(sample_imgs.size(3))
             #             sample_imgs = torch.nn.functional.interpolate(sample_imgs, scale_factor=2)
@@ -255,7 +253,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         writer_dict['train_global_steps'] = global_steps + 1
 
 
-#def get_is(args, gen_net: nn.Module, num_img):
 def get_is(args, gen_net: nn.Module, train_loader, epoch):
     """
     Get inception score.
@@ -268,31 +265,63 @@ def get_is(args, gen_net: nn.Module, train_loader, epoch):
     # eval mode
     gen_net = gen_net.eval()
 
-    #eval_iter = num_img // args.eval_batch_size
-    eval_iter = args.num_eval_imgs // args.eval_batch_size
-    img_list = list()
-    dataloader_iterator = iter(train_loader)
-    for _ in tqdm(range(eval_iter)):
-        #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
+    with torch.no_grad():
+        #eval_iter = num_img // args.eval_batch_size
+        eval_iter = args.num_eval_imgs // args.eval_batch_size
+        print("Eval Iter", eval_iter)
+        img_list = list()
+        dataloader_iterator = iter(train_loader)
+        for _ in tqdm(range(eval_iter)):
+            #z = torch.cuda.FloatTensor(np.random.normal(0, 1, (args.eval_batch_size, args.latent_dim)))
 
-        # Generate a batch of images
-        # gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
-        # img_list.extend(list(gen_imgs))
+            # Generate a batch of images
+            # gen_imgs = gen_net(z).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
+            # img_list.extend(list(gen_imgs))
 
-        try:
-            eeg, label, img = next(dataloader_iterator)
-        except StopIteration:
-            dataloader_iterator = iter(train_loader)
-            eeg, label, img = next(dataloader_iterator)
+            try:
+                eeg, label, img = next(dataloader_iterator)
+            except StopIteration:
+                dataloader_iterator = iter(train_loader)
+                eeg, label, img = next(dataloader_iterator)
 
-        gen_imgs = gen_net(eeg, epoch).mul_(127.5).add_(127.5).clamp_(0.0, 255.0).permute(0, 2, 3, 1).to('cpu', torch.uint8).numpy()
-        img_list.extend(list(gen_imgs))
+            gen_imgs = gen_net(eeg, epoch)
+            img_list.extend(list(gen_imgs))
+        
+        # get inception score
+        IS, IS_std = get_inception_score(img_list)
+    
+    """
+    with torch.no_grad():
+        #img_list = list()
+        gen_imgs = []
+        for i, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
+            # Generate a batch of images
+            gen_img = gen_net(eeg, epoch)
+            #gen_img = F.convert_image_dtype(gen_img, torch.float32)
+            gen_img = preprocess(gen_img)
+            #print("gen_img shape", gen_img.shape)
+            gen_imgs.append(gen_img)
+            #img_list.extend(list(gen_img))
+            #print("gen_imgs", gen_imgs)
+            #print("img_list", img_list)
+    
+        # get inception score
+        #logger.info('calculate Inception score...')
+        IS, IS_std = get_inception_score(gen_imgs)
+    """
+    """
+    with torch.no_grad():
+        gen_imgs = []
+        for i, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
+            gen_img = gen_net(eeg, epoch)
+            gen_imgs.append(gen_img)
+    
+        loader = DataLoader(gen_imgs, batch_size=50, num_workers=4)
+        # get inception score
+        IS, IS_std = get_inception_score(loader)
+    """
 
-    # get inception score
-    logger.info('calculate Inception score...')
-    mean, std = get_inception_score(img_list)
-
-    return mean
+    return IS
 
 
 def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
@@ -358,7 +387,7 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
 
     return mean, -9999
 
-
+"""
 def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
     # eval mode
     gen_net.eval()
@@ -374,7 +403,38 @@ def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict
         save_image(sample_imgs, f'./samples/{args.exp_name}/sampled_images_{epoch}.png', nrow=10, normalize=True,
                    scale_each=True)
     return 0
+"""
 
+"""
+def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
+    #parent_dir = "/home/d.sorge/eeg_visual_classification"
+    # eval mode
+    gen_net.eval()
+    with torch.no_grad():
+        # generate images
+        sample_imgs = []
+        for i, (eeg, label, imgs) in enumerate(train_loader):
+            sample_img = gen_net(eeg, epoch)
+            sample_imgs.append(sample_img)
+        sample_imgs = torch.cat(sample_imgs, dim=0)
+        #directory = "/outputEpoch{epoch}"
+        #path = os.path.join(parent_dir, directory)
+        #os.makedirs(path)
+        os.makedirs(f"./outputEpoch{epoch}", exist_ok=True)
+        save_image(sample_imgs, f'./outputEpoch{epoch}/sampled_images_{epoch}.png', nrow=10, normalize=True,
+                   scale_each=True)
+    return 0
+"""
+
+def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
+    # eval mode
+    gen_net.eval()
+    with torch.no_grad():
+        os.makedirs(f"./trainingOutput/outputEpoch{epoch}", exist_ok=True)
+        for i, (eeg, label, imgs) in enumerate(train_loader):
+            sample_img = gen_net(eeg, epoch)
+            save_image(sample_img, f'./trainingOutput/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+    return 0
 
 def get_topk_arch_hidden(args, controller, gen_net, prev_archs, prev_hiddens):
     """
