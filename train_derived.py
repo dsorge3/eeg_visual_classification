@@ -5,13 +5,12 @@ from __future__ import print_function
 import cfg
 import models_search
 import datasets
-from functions import train, validate, get_is, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
+from functions import train, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
 from utils.utils import set_log_dir, save_checkpoint, create_logger
 from utils.inception_score import _init_inception
 from utils.fid_score import create_inception_graph, check_or_download_inception
 
-from pytorch_gan_metrics.utils import ImageData, get_inception_score_and_fid, get_inception_score, get_inception_score_from_directory
-from torch.utils.data import DataLoader
+from pytorch_gan_metrics.utils import get_inception_score_from_directory
 
 import torch
 import torch.multiprocessing as mp
@@ -25,8 +24,6 @@ from tqdm import tqdm
 from copy import deepcopy
 from adamw import AdamW
 import random
-
-from eegDatasetClass import EEGDataset
 
 # torch.backends.cudnn.enabled = True
 # torch.backends.cudnn.benchmark = True
@@ -196,7 +193,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # initial
     fixed_z = torch.cuda.FloatTensor(np.random.normal(0, 1, (100, args.latent_dim)))
     avg_gen_net = deepcopy(gen_net).cpu()
-    gen_avg_param = copy_params(avg_gen_net)
+    * EDIT #gen_avg_param = copy_params(avg_gen_net)
     del avg_gen_net
     start_epoch = 0
     best_fid = 1e4
@@ -220,7 +217,7 @@ def main_worker(gpu, ngpus_per_node, args):
         
 #         avg_gen_net = deepcopy(gen_net)
         gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])
-        gen_avg_param = copy_params(gen_net, mode='gpu')
+        * EDIT #gen_avg_param = copy_params(gen_net, mode='gpu')
         gen_net.load_state_dict(checkpoint['gen_state_dict'])
         fixed_z = checkpoint['fixed_z']
 #         del avg_gen_net
@@ -249,25 +246,27 @@ def main_worker(gpu, ngpus_per_node, args):
         'valid_global_steps': start_epoch // args.val_freq,
     }
 
-    #dataset = EEGDataset(args.eeg_dataset, args.splits_path, args.split_num)
-    #eeg, label, img = dataset.__getitem__(0)
-    #print("EEG", eeg.shape)
-    #rint("IMG", img.size)
-    #lentr = dataset.get()
-    #print("len trSet", lentr)
-    #split = dataset.get2()
-    #print("len split", split)
-    #data = dataset.get3()
-    #print("len data", data)
-    #eeg = dataset.getone()
-    #print("self.data[self.split_idx[0]][eeg]:", eeg)
+    """
+    dataset = EEGDataset(args.eeg_dataset, args.splits_path, args.split_num)
+    eeg, label, img = dataset.__getitem__(0)
+    print("EEG", eeg.shape)
+    Print("IMG", img.size)
+    lentr = dataset.get()
+    print("len trSet", lentr)
+    split = dataset.get2()
+    print("len split", split)
+    data = dataset.get3()
+    print("len data", data)
+    eeg = dataset.getone()
+    print("self.data[self.split_idx[0]][eeg]:", eeg)
 
-    #label = dataset.gettwo()
-    #print("self.data[self.split_idx[0]][label]:", label)
+    label = dataset.gettwo()
+    print("self.data[self.split_idx[0]][label]:", label)
 
-    #img = dataset.getthree()
-    #print("self.data[self.split_idx[0]][img]:", img)
-    #exit()
+    img = dataset.getthree()
+    print("self.data[self.split_idx[0]][img]:", img)
+    exit()
+    """
 
     # train loop
     for epoch in range(int(start_epoch), int(args.max_epoch)):
@@ -278,33 +277,32 @@ def main_worker(gpu, ngpus_per_node, args):
         print(f"path: {args.path_helper['prefix']}") if args.rank==0 else 0
         train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, fixed_z, lr_schedulers)
         
-        backup_param = copy_params(gen_net)
-        load_params(gen_net, gen_avg_param, args, mode="cpu")
+        * EDIT #backup_param = copy_params(gen_net)
+        * EDIT #load_params(gen_net, gen_avg_param, args, mode="cpu")
         save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
-        load_params(gen_net, backup_param, args)
-        
-        backup_param = copy_params(gen_net)
-        load_params(gen_net, gen_avg_param, args, mode="cpu")
         IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/trainingOutput/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
-        load_params(gen_net, backup_param, args)
+        * EDIT #load_params(gen_net, backup_param, args)
         is_best = False
-
+        
         """
         if args.rank == 0 and args.show:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
-            save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
+            #save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
+            save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
             load_params(gen_net, backup_param, args)
         
         if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch) - 1:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
+            save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
             #inception_score, fid_score = validate(args, fixed_z, None, epoch, gen_net, writer_dict)
-            inception_score = get_is(args, gen_net, train_loader, epoch)
-            if args.rank == 0:
+            IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/trainingOutput/outputEpoch{epoch}')
+            print("Inception Score Epoch", epoch, ":", IS)
+            #if args.rank == 0:
                 #logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
-                logger.info(f'Inception score: {inception_score} || @ epoch {epoch}.')
+                #print("Inception Score Epoch", epoch, ":", IS)
             load_params(gen_net, backup_param, args)
             #if fid_score < best_fid:
             #    best_fid = fid_score
@@ -315,8 +313,8 @@ def main_worker(gpu, ngpus_per_node, args):
             is_best = False
         """
 
-        avg_gen_net = deepcopy(gen_net).cpu()
-        load_params(avg_gen_net, gen_avg_param, args)
+        avg_gen_net = deepcopy(gen_net)
+        * EDIT #load_params(avg_gen_net, gen_avg_param, args)
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
                                                     and args.rank == 0):
             save_checkpoint({
@@ -326,6 +324,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 'gen_state_dict': gen_net.state_dict(),
                 'dis_state_dict': dis_net.state_dict(),
                 'avg_gen_state_dict': avg_gen_net.state_dict(),
+                'avg_gen_state_dict': gen_net.state_dict(),
                 'gen_optimizer': gen_optimizer.state_dict(),
                 'dis_optimizer': dis_optimizer.state_dict(),
                 'best_fid': best_fid,
