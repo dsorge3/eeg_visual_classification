@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument(
         '-sp',
         '--splits_path',
-        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvppr_2017/block_splits_by_image_all.pth",
+        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvpr_2017/block_splits_by_image_all.pth",
         help="splits path")
     parser.add_argument(
         '-sn',
@@ -164,7 +164,7 @@ def parse_args():
     parser.add_argument(
         '--eeg_dataset',
         type=str,
-        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvppr_2017/eeg_5_95_std.pth",
+        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvpr_2017/eeg_5_95_std.pth",
         help="EEG dataset path")
     parser.add_argument(
         '-mt',
@@ -308,6 +308,10 @@ def parse_args():
                         help='discriminator mlp ratio')
     parser.add_argument('--show', action='store_true',
                     help='show')
+    parser.add_argument('--path', type=str, default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvpr_2017/eeg_5_95_std.pth", 
+                        help='path to image directory')
+    parser.add_argument('--use_torch', action='store_true',
+                        help='using pytorch as the matrix operations backend')
 
     opt = parser.parse_args()
 
