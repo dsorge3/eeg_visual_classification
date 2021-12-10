@@ -77,7 +77,7 @@ def compute_gradient_penalty(D, real_samples, fake_samples, phi):
 
 
 def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader,
-          epoch, writer_dict, fixed_z, schedulers=None):
+          epoch, writer_dict, schedulers=None):
     writer = writer_dict['writer']
     gen_step = 0
     # train mode
@@ -225,7 +225,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
             # moving average weight
             for p, avg_p in zip(gen_net.parameters(), gen_avg_param):
                 cpu_p = deepcopy(p)
-                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)
+                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)
+                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)
                 del cpu_p
 
             writer.add_scalar('g_loss', g_loss.item(), global_steps) if args.rank == 0 else 0
