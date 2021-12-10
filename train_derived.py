@@ -5,12 +5,10 @@ from __future__ import print_function
 import cfg
 import models_search
 import datasets
-from functions import train, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
+from functions import train, validate, save_samples, LinearLrDecay, load_params, copy_params, cur_stages
 from utils.utils import set_log_dir, save_checkpoint, create_logger
-from utils.inception_score import _init_inception
-from utils.fid_score import create_inception_graph, check_or_download_inception
-
-from pytorch_gan_metrics.utils import get_inception_score_from_directory
+# from utils.inception_score import _init_inception
+# from utils.fid_score import create_inception_graph, check_or_download_inception
 
 import torch
 import torch.multiprocessing as mp
@@ -23,7 +21,7 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from copy import deepcopy
 from adamw import AdamW
-import random
+import random 
 
 # torch.backends.cudnn.enabled = True
 # torch.backends.cudnn.benchmark = True
@@ -107,10 +105,7 @@ def main_worker(gpu, ngpus_per_node, args):
             nn.init.constant_(m.bias.data, 0.0)
 
     # import network
-    gen_net = eval('models_search.' + args.gen_model + '.Generator')(args=args)
-    dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
-    gen_net.apply(weights_init)
-    dis_net.apply(weights_init)
+    
     
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
@@ -170,15 +165,15 @@ def main_worker(gpu, ngpus_per_node, args):
     dis_scheduler = LinearLrDecay(dis_optimizer, args.d_lr, 0.0, 0, args.max_iter * args.n_critic)
 
     # fid stat
-    #if args.dataset.lower() == 'cifar10':
-    #    fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
-    #elif args.dataset.lower() == 'stl10':
-    #    fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
-    #elif args.fid_stat is not None:
-    #    fid_stat = args.fid_stat
-    #else:
-    #    raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
-    #assert os.path.exists(fid_stat)
+    if args.dataset.lower() == 'cifar10':
+        fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
+    elif args.dataset.lower() == 'stl10':
+        fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
+    elif args.fid_stat is not None:
+        fid_stat = args.fid_stat
+    else:
+        raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
+    assert os.path.exists(fid_stat)
 
 
     # epoch number for dis_net
@@ -193,7 +188,7 @@ def main_worker(gpu, ngpus_per_node, args):
     # initial
     fixed_z = torch.cuda.FloatTensor(np.random.normal(0, 1, (100, args.latent_dim)))
     avg_gen_net = deepcopy(gen_net).cpu()
-    * EDIT #gen_avg_param = copy_params(avg_gen_net)
+    gen_avg_param = copy_params(avg_gen_net)
     del avg_gen_net
     start_epoch = 0
     best_fid = 1e4
@@ -217,7 +212,7 @@ def main_worker(gpu, ngpus_per_node, args):
         
 #         avg_gen_net = deepcopy(gen_net)
         gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])
-        * EDIT #gen_avg_param = copy_params(gen_net, mode='gpu')
+        gen_avg_param = copy_params(gen_net, mode='gpu')
         gen_net.load_state_dict(checkpoint['gen_state_dict'])
         fixed_z = checkpoint['fixed_z']
 #         del avg_gen_net
@@ -246,28 +241,6 @@ def main_worker(gpu, ngpus_per_node, args):
         'valid_global_steps': start_epoch // args.val_freq,
     }
 
-    """
-    dataset = EEGDataset(args.eeg_dataset, args.splits_path, args.split_num)
-    eeg, label, img = dataset.__getitem__(0)
-    print("EEG", eeg.shape)
-    Print("IMG", img.size)
-    lentr = dataset.get()
-    print("len trSet", lentr)
-    split = dataset.get2()
-    print("len split", split)
-    data = dataset.get3()
-    print("len data", data)
-    eeg = dataset.getone()
-    print("self.data[self.split_idx[0]][eeg]:", eeg)
-
-    label = dataset.gettwo()
-    print("self.data[self.split_idx[0]][label]:", label)
-
-    img = dataset.getthree()
-    print("self.data[self.split_idx[0]][img]:", img)
-    exit()
-    """
-
     # train loop
     for epoch in range(int(start_epoch), int(args.max_epoch)):
         train_sampler.set_epoch(epoch)
@@ -275,48 +248,34 @@ def main_worker(gpu, ngpus_per_node, args):
         cur_stage = cur_stages(epoch, args)
         print("cur_stage " + str(cur_stage)) if args.rank==0 else 0
         print(f"path: {args.path_helper['prefix']}") if args.rank==0 else 0
-        train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, fixed_z, lr_schedulers)
+        train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict,fixed_z,
+               lr_schedulers)
         
-        * EDIT #backup_param = copy_params(gen_net)
-        * EDIT #load_params(gen_net, gen_avg_param, args, mode="cpu")
-        save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
-        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/trainingOutput/outputEpoch{epoch}')
-        print("Inception Score Epoch", epoch, ":", IS)
-        * EDIT #load_params(gen_net, backup_param, args)
-        is_best = False
-        
-        """
         if args.rank == 0 and args.show:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
-            #save_samples(args, fixed_z, None, epoch, gen_net, writer_dict)
-            save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
+            save_samples(args, fixed_z, fid_stat, epoch, gen_net, writer_dict)
             load_params(gen_net, backup_param, args)
         
-        if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch) - 1:
+        if epoch and epoch % args.val_freq == 0 or epoch == int(args.max_epoch)-1:
             backup_param = copy_params(gen_net)
             load_params(gen_net, gen_avg_param, args, mode="cpu")
-            save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
-            #inception_score, fid_score = validate(args, fixed_z, None, epoch, gen_net, writer_dict)
-            IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/trainingOutput/outputEpoch{epoch}')
-            print("Inception Score Epoch", epoch, ":", IS)
-            #if args.rank == 0:
-                #logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
-                #print("Inception Score Epoch", epoch, ":", IS)
+            inception_score, fid_score = validate(args, fixed_z, fid_stat, epoch, gen_net, writer_dict)
+            if args.rank==0:
+                logger.info(f'Inception score: {inception_score}, FID score: {fid_score} || @ epoch {epoch}.')
             load_params(gen_net, backup_param, args)
-            #if fid_score < best_fid:
-            #    best_fid = fid_score
-            #    is_best = True
-            #else:
-            #    is_best = False
+            if fid_score < best_fid:
+                best_fid = fid_score
+                is_best = True
+            else:
+                is_best = False
         else:
             is_best = False
-        """
 
         avg_gen_net = deepcopy(gen_net)
-        * EDIT #load_params(avg_gen_net, gen_avg_param, args)
+        load_params(avg_gen_net, gen_avg_param, args)
         if not args.multiprocessing_distributed or (args.multiprocessing_distributed
-                                                    and args.rank == 0):
+                and args.rank == 0):
             save_checkpoint({
                 'epoch': epoch + 1,
                 'gen_model': args.gen_model,
@@ -324,7 +283,6 @@ def main_worker(gpu, ngpus_per_node, args):
                 'gen_state_dict': gen_net.state_dict(),
                 'dis_state_dict': dis_net.state_dict(),
                 'avg_gen_state_dict': avg_gen_net.state_dict(),
-                'avg_gen_state_dict': gen_net.state_dict(),
                 'gen_optimizer': gen_optimizer.state_dict(),
                 'dis_optimizer': dis_optimizer.state_dict(),
                 'best_fid': best_fid,
