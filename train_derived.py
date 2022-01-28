@@ -25,6 +25,7 @@ from adamw import AdamW
 import random
 
 from eegDatasetClass import EEGDataset
+from visual_imagery.autoencoder.main1 import AutoEncoder
 
 
 # torch.backends.cudnn.enabled = True
@@ -140,10 +141,10 @@ def main_worker(gpu, ngpus_per_node, args):
             args.batch_size = args.dis_batch_size
 
             args.num_workers = int((args.num_workers + ngpus_per_node - 1) / ngpus_per_node)
-            gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu],
-                                                                find_unused_parameters=True)
-            dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu],
-                                                                find_unused_parameters=True)
+            #gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu], find_unused_parameters=True)
+            #dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu], find_unused_parameters=True)
+            gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu], find_unused_parameters=False)       #MODIFICATO
+            dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu], find_unused_parameters=False)       #MODIFICATO
         else:
             gen_net.cuda()
             dis_net.cuda()
@@ -199,6 +200,10 @@ def main_worker(gpu, ngpus_per_node, args):
     start_epoch = 0
     best_fid = 1e4
 
+    #MODIFICA: DEFINIZIONE OGGETTO CLASSE AutoEncoder IMPORTATA       
+    #autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5).cuda()
+    autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5)
+    
     # set writer
     writer = None
     if args.load_path:
@@ -225,7 +230,19 @@ def main_worker(gpu, ngpus_per_node, args):
         logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None
         print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
         writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None
+        #del checkpoint
+
+        print(f'=> resuming autoencoder from {args.autoencoder_path}')      #MODIFICA: RESUME AUTOENCODER NET DA UNO DEI PRIMI 50 CHECKPOINT FILE OTTENUTI DAL SUO TRAINING
+        assert os.path.exists(args.autoencoder_path)
+        checkpoint_autoencoder = os.path.join(args.autoencoder_path)
+        assert os.path.exists(checkpoint_autoencoder)
+        chkpoint = torch.load(checkpoint_autoencoder)
+        autoencoder.load_state_dict(chkpoint['model'])
+        autoencoder.return_encoder = True
+        print(f'=> loaded checkpoint {checkpoint_autoencoder}')
+
         del checkpoint
+        del chkpoint
     else:
         # create new log dir
         assert args.exp_name
@@ -233,6 +250,15 @@ def main_worker(gpu, ngpus_per_node, args):
             args.path_helper = set_log_dir('logs', args.exp_name)
             logger = create_logger(args.path_helper['log_path'])
             writer = SummaryWriter(args.path_helper['log_path'])
+
+        print(f'=> resuming autoencoder from {args.autoencoder_path}')      #MODIFICA: RESUME AUTOENCODER NET DA UNO DEI PRIMI 50 CHECKPOINT FILE OTTENUTI DAL SUO TRAINING
+        assert os.path.exists(args.autoencoder_path)
+        checkpoint_autoencoder = os.path.join(args.autoencoder_path)
+        assert os.path.exists(checkpoint_autoencoder)
+        chkpoint = torch.load(checkpoint_autoencoder)
+        autoencoder.load_state_dict(chkpoint['model'])
+        autoencoder.return_encoder = True
+        print(f'=> loaded checkpoint {checkpoint_autoencoder}')
 
     if args.rank == 0:
         logger.info(args)
@@ -249,12 +275,12 @@ def main_worker(gpu, ngpus_per_node, args):
         cur_stage = cur_stages(epoch, args)
         print("cur_stage " + str(cur_stage)) if args.rank == 0 else 0
         print(f"path: {args.path_helper['prefix']}") if args.rank == 0 else 0
-        train(args, gen_net, dis_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, lr_schedulers)
+        train(args, gen_net, dis_net, autoencoder, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, lr_schedulers)
 
         backup_param = copy_params(gen_net, mode="gpu")
         load_params(gen_net, gen_avg_param, args, mode="cpu")
         save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
-        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/trainingOutput/outputEpoch{epoch}')
+        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/training_Output_With_Autoencoder/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
         load_params(gen_net, backup_param, args, mode="cpu")
         is_best = False
@@ -267,7 +293,7 @@ def main_worker(gpu, ngpus_per_node, args):
                 'dis_model': args.dis_model,
                 'gen_state_dict': gen_net.state_dict(),
                 'dis_state_dict': dis_net.state_dict(),
-                'avg_gen_state_dict': gen_avg_param.state_dict(),
+                'avg_gen_state_dict': gen_avg_param,
                 'gen_optimizer': gen_optimizer.state_dict(),
                 'dis_optimizer': dis_optimizer.state_dict(),
                 'best_fid': best_fid,
