@@ -76,7 +76,7 @@ def compute_gradient_penalty(D, real_samples, fake_samples, phi):
     return gradient_penalty
 
 
-def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader,
+def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader,
           epoch, writer_dict, schedulers=None):
     writer = writer_dict['writer']
     gen_step = 0
@@ -99,7 +99,10 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optim
         # ---------------------
 
         real_validity = dis_net(real_imgs)
-        fake_imgs = gen_net(eeg, epoch).detach()
+        eeg = torch.flatten(eeg, start_dim=1)       #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
+        rec = autoencoder(eeg)                      #MODIFICA: AGGIUNTA CHIAMATA AUTOENCODER 
+        fake_imgs = gen_net(rec, epoch).detach()    #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
+        #fake_imgs = gen_net(eeg, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
 
@@ -431,10 +434,10 @@ def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer
     # eval mode
     gen_net.eval()
     with torch.no_grad():
-        os.makedirs(f"./trainingOutput/outputEpoch{epoch}", exist_ok=True)
+        os.makedirs(f"./training_Output_With_Autoencoder/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
             sample_img = gen_net(eeg, epoch)
-            save_image(sample_img, f'./trainingOutput/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+            save_image(sample_img, f'./training_Output_With_Autoencoder/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
 
 def get_topk_arch_hidden(args, controller, gen_net, prev_archs, prev_hiddens):
