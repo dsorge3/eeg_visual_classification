@@ -99,9 +99,10 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
         # ---------------------
 
         real_validity = dis_net(real_imgs)
-        eeg = torch.flatten(eeg, start_dim=1)       #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
-        rec = autoencoder(eeg)                      #MODIFICA: AGGIUNTA CHIAMATA AUTOENCODER 
-        fake_imgs = gen_net(rec, epoch).detach()    #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
+        eeg = torch.flatten(eeg, start_dim=1)           #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
+        with torch.no_grad():                           #MODIFICA: AGGIUNTA DI TORCH.NO_GRAD
+            rec = autoencoder(eeg)                      #MODIFICA: AGGIUNTA CHIAMATA AUTOENCODER 
+        fake_imgs = gen_net(rec, epoch).detach()        #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
         #fake_imgs = gen_net(eeg, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
@@ -169,7 +170,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
 
             for accumulated_idx in range(args.g_accumulated_times):
                 #gen_eeg = gen_net(eeg, epoch)
-                gen_eeg = gen_net(rec, epoch)
+                gen_eeg = gen_net(rec, epoch)       #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
                 fake_validity = dis_net(gen_eeg)
 
                 # cal loss
@@ -203,7 +204,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
                 else:
                     g_loss = -torch.mean(fake_validity)
                 g_loss = g_loss / float(args.g_accumulated_times)
-                g_loss.backward()
+                g_loss.backward()                  #MODIFICA: AGGIUNTA RETAIN_GRAPH
 
             torch.nn.utils.clip_grad_norm_(gen_net.parameters(), 5.)
             gen_optimizer.step()
@@ -229,8 +230,10 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
             # moving average weight
             for p, avg_p in zip(gen_net.parameters(), gen_avg_param):
                 cpu_p = deepcopy(p)
-                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)
-                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)
+                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)
+                #ema_beta_tensor = torch.tensor(ema_beta).cuda()
+                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)
+                #avg_p.mul_(ema_beta_tensor).add_(1. - ema_beta_tensor, cpu_p.cuda().data)
                 del cpu_p
 
             writer.add_scalar('g_loss', g_loss.item(), global_steps) if args.rank == 0 else 0
@@ -431,13 +434,14 @@ def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer
     return 0
 """
 
-def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
+def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, autoencoder, writer_dict, clean_dir=True):
     # eval mode
     gen_net.eval()
     with torch.no_grad():
         os.makedirs(f"./training_Output_With_Autoencoder/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
-            sample_img = gen_net(eeg, epoch)
+            rec = autoencoder(eeg.flatten(start_dim=1))     #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN E CHIAMATA AUTOENCODER    
+            sample_img = gen_net(rec, epoch)                #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
             save_image(sample_img, f'./training_Output_With_Autoencoder/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
 
