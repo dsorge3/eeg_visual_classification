@@ -233,8 +233,9 @@ def main_worker(gpu, ngpus_per_node, args):
         assert os.path.exists(args.autoencoder_path)
         checkpoint_autoencoder = os.path.join(args.autoencoder_path)
         assert os.path.exists(checkpoint_autoencoder)
-        chkpoint = torch.load(checkpoint_autoencoder)
-        autoencoder.load_state_dict(chkpoint['model'], map_location="cpu")
+        loc = 'cuda:{}'.format(args.gpu)
+        chkpoint = torch.load(checkpoint_autoencoder, map_location=loc)
+        autoencoder.load_state_dict(chkpoint['model'])
         autoencoder.return_encoder = True
         autoencoder.eval()
         autoencoder.to(torch.device("cuda"))
@@ -255,8 +256,9 @@ def main_worker(gpu, ngpus_per_node, args):
         assert os.path.exists(args.autoencoder_path)
         checkpoint_autoencoder = os.path.join(args.autoencoder_path)
         assert os.path.exists(checkpoint_autoencoder)
-        chkpoint = torch.load(checkpoint_autoencoder)
-        autoencoder.load_state_dict(chkpoint['model'], map_location="cpu")
+        loc = 'cuda:{}'.format(args.gpu)
+        chkpoint = torch.load(checkpoint_autoencoder, map_location=loc)
+        autoencoder.load_state_dict(chkpoint['model'])
         autoencoder.return_encoder = True
         autoencoder.eval()
         autoencoder.to(torch.device("cuda"))
