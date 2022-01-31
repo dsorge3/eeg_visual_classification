@@ -50,7 +50,7 @@ def parse_args():
     parser.add_argument(
         '-sp',
         '--splits_path',
-        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvpr_2017/block_splits_by_image_all.pth",
+        default="/projects/data/classification/eeg_cvpr_2017/block_splits_by_image_all.pth",
         help="splits path")
     parser.add_argument(
         '-sn',
@@ -138,6 +138,10 @@ def parse_args():
         type=str,
         help='The reload model path')
     parser.add_argument(
+        '--autoencoder_path',
+        type=str,
+        help='The reload model path')
+    parser.add_argument(
         '--exp_name',
         type=str,
         help='The name of exp')
@@ -164,7 +168,7 @@ def parse_args():
     parser.add_argument(
         '--eeg_dataset',
         type=str,
-        default="/home/d.sorge/eeg_visual_classification/dataset/eeg_cvpr_2017/eeg_5_95_std.pth",
+        default="/projects/data/classification/eeg_cvpr_2017/eeg_5_95_std.pth",
         help="EEG dataset path")
     parser.add_argument(
         '-mt',
