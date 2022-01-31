@@ -237,6 +237,7 @@ def main_worker(gpu, ngpus_per_node, args):
         chkpoint = torch.load(checkpoint_autoencoder, map_location=loc)
         autoencoder.load_state_dict(chkpoint['model'])
         autoencoder.return_encoder = True
+        autoencoder.zero_grad()
         autoencoder.eval()
         autoencoder.to(torch.device("cuda"))
         autoencoder = torch.nn.parallel.DistributedDataParallel(autoencoder, device_ids=[args.gpu], find_unused_parameters=False)
@@ -260,6 +261,7 @@ def main_worker(gpu, ngpus_per_node, args):
         chkpoint = torch.load(checkpoint_autoencoder, map_location=loc)
         autoencoder.load_state_dict(chkpoint['model'])
         autoencoder.return_encoder = True
+        autoencoder.zero_grad()
         autoencoder.eval()
         autoencoder.to(torch.device("cuda"))
         autoencoder = torch.nn.parallel.DistributedDataParallel(autoencoder, device_ids=[args.gpu], find_unused_parameters=False)
@@ -284,7 +286,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
         backup_param = copy_params(gen_net, mode="gpu")
         load_params(gen_net, gen_avg_param, args, mode="cpu")
-        save_samples(args, train_loader, None, epoch, gen_net, writer_dict)
+        save_samples(args, train_loader, None, epoch, gen_net, autoencoder, writer_dict)
         IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/training_Output_With_Autoencoder/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
         load_params(gen_net, backup_param, args, mode="cpu")
