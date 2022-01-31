@@ -168,7 +168,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
 
             for accumulated_idx in range(args.g_accumulated_times):
-                gen_eeg = gen_net(eeg, epoch)
+                gen_eeg = gen_net(rec, epoch) #MODIFICATO: OUTPUT AUTOENCODER DATO COME INPUT A GEN_NET 
                 fake_validity = dis_net(gen_eeg)
 
                 # cal loss
