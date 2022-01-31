@@ -141,10 +141,8 @@ def main_worker(gpu, ngpus_per_node, args):
             args.batch_size = args.dis_batch_size
 
             args.num_workers = int((args.num_workers + ngpus_per_node - 1) / ngpus_per_node)
-            #gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu], find_unused_parameters=True)
-            #dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu], find_unused_parameters=True)
-            gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu], find_unused_parameters=False)       #MODIFICATO
-            dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu], find_unused_parameters=False)       #MODIFICATO
+            gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu], find_unused_parameters=True)
+            dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu], find_unused_parameters=True)
         else:
             gen_net.cuda()
             dis_net.cuda()
@@ -201,7 +199,6 @@ def main_worker(gpu, ngpus_per_node, args):
     best_fid = 1e4
 
     #MODIFICA: DEFINIZIONE OGGETTO CLASSE AutoEncoder IMPORTATA       
-    #autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5).cuda()
     autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5)
     
     # set writer
@@ -237,8 +234,11 @@ def main_worker(gpu, ngpus_per_node, args):
         checkpoint_autoencoder = os.path.join(args.autoencoder_path)
         assert os.path.exists(checkpoint_autoencoder)
         chkpoint = torch.load(checkpoint_autoencoder)
-        autoencoder.load_state_dict(chkpoint['model'])
+        autoencoder.load_state_dict(chkpoint['model'], map_location="cpu")
         autoencoder.return_encoder = True
+        autoencoder.eval()
+        autoencoder.to(torch.device("cuda"))
+        autoencoder = torch.nn.parallel.DistributedDataParallel(autoencoder, device_ids=[args.gpu], find_unused_parameters=False)
         print(f'=> loaded checkpoint {checkpoint_autoencoder}')
 
         del checkpoint
@@ -256,8 +256,11 @@ def main_worker(gpu, ngpus_per_node, args):
         checkpoint_autoencoder = os.path.join(args.autoencoder_path)
         assert os.path.exists(checkpoint_autoencoder)
         chkpoint = torch.load(checkpoint_autoencoder)
-        autoencoder.load_state_dict(chkpoint['model'])
+        autoencoder.load_state_dict(chkpoint['model'], map_location="cpu")
         autoencoder.return_encoder = True
+        autoencoder.eval()
+        autoencoder.to(torch.device("cuda"))
+        autoencoder = torch.nn.parallel.DistributedDataParallel(autoencoder, device_ids=[args.gpu], find_unused_parameters=False)
         print(f'=> loaded checkpoint {checkpoint_autoencoder}')
 
     if args.rank == 0:
