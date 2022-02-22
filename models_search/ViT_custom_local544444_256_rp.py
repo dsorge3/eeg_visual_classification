@@ -258,16 +258,16 @@ class Generator(nn.Module):
         self.pos_embed_2 = nn.Parameter(torch.zeros(1, (self.bottom_width*2)**2, embed_dim))
         self.pos_embed_3 = nn.Parameter(torch.zeros(1, (self.bottom_width*4)**2, embed_dim))
         self.pos_embed_4 = nn.Parameter(torch.zeros(1, (self.bottom_width*8)**2, embed_dim//4))
-        #self.pos_embed_5 = nn.Parameter(torch.zeros(1, (self.bottom_width*16)**2, embed_dim//16))
-        #self.pos_embed_6 = nn.Parameter(torch.zeros(1, (self.bottom_width*32)**2, embed_dim//64))
+        #self.pos_embed_5 = nn.Parameter(torch.zeros(1, (self.bottom_width*16)**2, embed_dim//16))  MODIFICATO
+        #self.pos_embed_6 = nn.Parameter(torch.zeros(1, (self.bottom_width*32)**2, embed_dim//64))  MODIFICATO 
                                         
         self.pos_embed = [
             self.pos_embed_1,
             self.pos_embed_2,
             self.pos_embed_3,
             self.pos_embed_4,
-            #self.pos_embed_5,
-            #self.pos_embed_6
+            #self.pos_embed_5,  MODIFICATO
+            #self.pos_embed_6   MODIFICATO
         ]
         dpr = [x.item() for x in torch.linspace(0, drop_path_rate, depth[0])]  # stochastic depth decay rule
         self.blocks_1 = StageBlock(
@@ -324,9 +324,9 @@ class Generator(nn.Module):
                         drop_path=0, 
                         act_layer=act_layer,
                         norm_layer=norm_layer,
-                        window_size=16
+                        window_size=16          #MODIFICATO
                         )
-        #self.blocks_5 = StageBlock(
+        #self.blocks_5 = StageBlock(            MODIFICATO: ABBIAMO COMMENTATO
         #                depth=depth[4],
         #                dim=embed_dim//16,
         #                num_heads=num_heads,
@@ -358,7 +358,7 @@ class Generator(nn.Module):
         for i in range(len(self.pos_embed)):
             trunc_normal_(self.pos_embed[i], std=.02)
         self.deconv = nn.Sequential(
-            nn.Conv2d(self.embed_dim//4, 3, 1, 1, 0)
+            nn.Conv2d(self.embed_dim//4, 3, 1, 1, 0)    #MODIFICATO: PRIMA ERA nn.Conv2d(self.embed_dim//64, 3, 1, 1, 0)
         )
 #         self.apply(self._init_weights)
     
@@ -421,6 +421,7 @@ class Generator(nn.Module):
         x = x.view(-1, self.window_size, self.window_size, C)
         x = window_reverse(x, self.window_size, H, W).view(B,H,W,C).permute(0,3,1,2)
 
+        #MODIFICATO: ABBIAMO COMMENTATO PER self.blocks_5 e self.blocks_6
         """    
         x, H, W = pixel_upsample(x, H, W)
         x = x + self.pos_embed[4]
