@@ -24,9 +24,8 @@ from copy import deepcopy
 from adamw import AdamW
 import random
 
-from eegDatasetClass import EEGDataset
-from visual_imagery.autoencoder.main1 import AutoEncoder
-
+import importlib
+import models
 
 # torch.backends.cudnn.enabled = True
 # torch.backends.cudnn.benchmark = True
@@ -125,7 +124,7 @@ def main_worker(gpu, ngpus_per_node, args):
         # DistributedDataParallel will use all available devices.
         if args.gpu is not None:
 
-            torch.cuda.set_device(args.gpu)
+            torch.cuda.set_device(args.gpu)            
             gen_net = eval('models_search.' + args.gen_model + '.Generator')(args=args)
             dis_net = eval('models_search.' + args.dis_model + '.Discriminator')(args=args)
 
@@ -188,6 +187,7 @@ def main_worker(gpu, ngpus_per_node, args):
     args.max_epoch = args.max_epoch * args.n_critic
     dataset = datasets.ImageDataset(args, cur_img_size=8)
     train_loader = dataset.train
+    save_image_loader = dataset.train
     train_sampler = dataset.train_sampler
     print(len(train_loader))
     if args.max_iter:
@@ -199,7 +199,14 @@ def main_worker(gpu, ngpus_per_node, args):
     best_fid = 1e4
 
     #MODIFICA: DEFINIZIONE OGGETTO CLASSE AutoEncoder IMPORTATA       
-    autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5)
+    #autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5)
+
+    # Load model
+    model_options = {key: int(value) if value.isdigit() else (float(value) if value[0].isdigit() else value) for (key, value) in [x.split("=") for x in args.model_params]}
+    #Create discriminator lstm model
+    module = importlib.import_module("models." + args.model_type)
+    lstm = module.Model(**model_options)
+    #lstm = module.Model(128, 128, 1, 128)
     
     # set writer
     writer = None
@@ -228,23 +235,23 @@ def main_worker(gpu, ngpus_per_node, args):
         print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
         writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None
         #del checkpoint
-
-        print(f'=> resuming autoencoder from {args.autoencoder_path}')      #MODIFICA: RESUME AUTOENCODER NET DA UNO DEI PRIMI 50 CHECKPOINT FILE OTTENUTI DAL SUO TRAINING
-        assert os.path.exists(args.autoencoder_path)
-        checkpoint_autoencoder = os.path.join(args.autoencoder_path)
-        assert os.path.exists(checkpoint_autoencoder)
+        
+        print(f'=> resuming lstm from {args.lstm_path}')      #MODIFICA: RESUME LSTM NET
+        assert os.path.exists(args.lstm_path)
+        checkpoint_lstm = os.path.join(args.lstm_path)
+        assert os.path.exists(checkpoint_lstm)
         loc = 'cuda:{}'.format(args.gpu)
-        chkpoint = torch.load(checkpoint_autoencoder, map_location=loc)
-        autoencoder.load_state_dict(chkpoint['model'])
-        autoencoder.return_encoder = True
-        autoencoder.zero_grad()
-        autoencoder.eval()
-        autoencoder.to(torch.device("cuda"))
-        autoencoder = torch.nn.parallel.DistributedDataParallel(autoencoder, device_ids=[args.gpu], find_unused_parameters=False)
-        print(f'=> loaded checkpoint {checkpoint_autoencoder}')
-
+        #chkpoint = torch.load(checkpoint_lstm, map_location=loc)
+        #lstm.load_state_dict(chkpoint['model'])
+        lstm = torch.load(checkpoint_lstm, map_location=loc)
+        lstm.zero_grad()
+        lstm.eval()
+        lstm.to(torch.device("cuda"))
+        lstm = torch.nn.parallel.DistributedDataParallel(lstm, device_ids=[args.gpu], find_unused_parameters=False)
+        print(f'=> loaded checkpoint {checkpoint_lstm}')
+        
         del checkpoint
-        del chkpoint
+        #del chkpoint
     else:
         # create new log dir
         assert args.exp_name
@@ -252,21 +259,21 @@ def main_worker(gpu, ngpus_per_node, args):
             args.path_helper = set_log_dir('logs', args.exp_name)
             logger = create_logger(args.path_helper['log_path'])
             writer = SummaryWriter(args.path_helper['log_path'])
-
-        print(f'=> resuming autoencoder from {args.autoencoder_path}')      #MODIFICA: RESUME AUTOENCODER NET DA UNO DEI PRIMI 50 CHECKPOINT FILE OTTENUTI DAL SUO TRAINING
-        assert os.path.exists(args.autoencoder_path)
-        checkpoint_autoencoder = os.path.join(args.autoencoder_path)
-        assert os.path.exists(checkpoint_autoencoder)
+        
+        print(f'=> resuming lstm from {args.lstm_path}')      #MODIFICA: RESUME LSTM NET
+        assert os.path.exists(args.lstm_path)
+        checkpoint_lstm = os.path.join(args.lstm_path)
+        assert os.path.exists(checkpoint_lstm)
         loc = 'cuda:{}'.format(args.gpu)
-        chkpoint = torch.load(checkpoint_autoencoder, map_location=loc)
-        autoencoder.load_state_dict(chkpoint['model'])
-        autoencoder.return_encoder = True
-        autoencoder.zero_grad()
-        autoencoder.eval()
-        autoencoder.to(torch.device("cuda"))
-        autoencoder = torch.nn.parallel.DistributedDataParallel(autoencoder, device_ids=[args.gpu], find_unused_parameters=False)
-        print(f'=> loaded checkpoint {checkpoint_autoencoder}')
-
+        #chkpoint = torch.load(checkpoint_lstm, map_location=loc)
+        #lstm.load_state_dict(chkpoint['model'])
+        lstm = torch.load(checkpoint_lstm, map_location=loc)
+        lstm.zero_grad()
+        lstm.eval()
+        lstm.to(torch.device("cuda"))
+        lstm = torch.nn.parallel.DistributedDataParallel(lstm, device_ids=[args.gpu], find_unused_parameters=False)
+        print(f'=> loaded checkpoint {checkpoint_lstm}')
+        
     if args.rank == 0:
         logger.info(args)
     writer_dict = {
@@ -282,12 +289,12 @@ def main_worker(gpu, ngpus_per_node, args):
         cur_stage = cur_stages(epoch, args)
         print("cur_stage " + str(cur_stage)) if args.rank == 0 else 0
         print(f"path: {args.path_helper['prefix']}") if args.rank == 0 else 0
-        train(args, gen_net, dis_net, autoencoder, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, lr_schedulers)
-
+        train(args, gen_net, dis_net, lstm, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, lr_schedulers)
+        
         backup_param = copy_params(gen_net, mode="gpu")
         load_params(gen_net, gen_avg_param, args, mode="cpu")
-        save_samples(args, train_loader, None, epoch, gen_net, autoencoder, writer_dict)
-        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/training_Output_With_Autoencoder/outputEpoch{epoch}')
+        save_samples(args, save_image_loader, None, epoch, gen_net, lstm, writer_dict)
+        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/training_output_lstm/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
         load_params(gen_net, backup_param, args, mode="cpu")
         is_best = False
