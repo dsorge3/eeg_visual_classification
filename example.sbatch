@@ -12,8 +12,7 @@ module load cuda/10.1
 source /home/d.sorge/.bashrc
 conda activate venv
 
-#--latent_dim 56320 \
-#--load_path /home/d.sorge/eeg_visual_classification/logs/eeg_train_2021_12_09_11_49_19/Model/checkpointForEpoch2600 \
+#--latent_dim 56320
 
 python train_derived.py \
 -gen_bs 16 \
@@ -37,7 +36,7 @@ python train_derived.py \
 --df_dim 384 \
 --d_depth 3 \
 --g_depth 5,4,2,2 \
---latent_dim 100 \
+--latent_dim 128 \
 --gf_dim 256 \
 --num_workers 0 \
 --g_lr 0.0001 \
@@ -59,5 +58,5 @@ python train_derived.py \
 --patch_size 2 \
 --diff_aug filter,translation,erase_ratio,color,hue \
 --ema 0.995 \
---autoencoder_path /home/d.sorge/eeg_visual_classification/visual_imagery/autoencoder/logs/fit/AutoEncoder_EEG/20220125-141956/checkpoint_25.pth \
---exp_name eeg_train_autoencoder
+--lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm__subject0_epoch_200.pth \
+--exp_name eeg_train_lstm
