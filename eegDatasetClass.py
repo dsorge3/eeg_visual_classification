@@ -51,7 +51,8 @@ class EEGDataset:
         image = self.images[img_idx]
         # Get complete path
         dirName = image[:9]
-        imgPath = "/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/train/" + dirName + "/" + image + ".JPEG"
+        #imgPath = "/home/d.sorge/eeg_visual_classification/datasets/imageNet/ILSVRC/Data/CLS-LOC/train/" + dirName + "/" + image + ".JPEG"             PATH VECCHIO
+        imgPath = "/projects/data/classification/ImageNet2012/train/" + dirName + "/" + image + ".JPEG"
         if imgPath[-4:] == ".npy":
             img = np.load(imgPath)
             img = Image.fromarray(img.squeeze(0).transpose(1, 2, 0))
