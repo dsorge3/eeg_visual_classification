@@ -20,6 +20,8 @@ from utils.torch_fid_score import get_fid
 
 from torch.utils.data import DataLoader
 
+from eegDatasetClass import EEGDataset
+
 from torchvision import transforms
 
 preprocess = transforms.Compose([
@@ -76,8 +78,7 @@ def compute_gradient_penalty(D, real_samples, fake_samples, phi):
     return gradient_penalty
 
 
-def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader,
-          epoch, writer_dict, schedulers=None):
+def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, schedulers=None):
     writer = writer_dict['writer']
     gen_step = 0
     # train mode
@@ -99,10 +100,11 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
         # ---------------------
 
         real_validity = dis_net(real_imgs)
-        eeg = torch.flatten(eeg, start_dim=1)           #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
+        #eeg = torch.flatten(eeg, start_dim=1)           #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
         with torch.no_grad():                           #MODIFICA: AGGIUNTA DI TORCH.NO_GRAD
-            rec = autoencoder(eeg)                      #MODIFICA: AGGIUNTA CHIAMATA AUTOENCODER 
-        fake_imgs = gen_net(rec, epoch).detach()        #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
+            #rec = autoencoder(eeg)                       
+            rec = lstm(eeg)                             #MODIFICA: AGGIUNTA CHIAMATA LSTM
+        fake_imgs = gen_net(rec, epoch).detach()        #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
         #fake_imgs = gen_net(eeg, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
@@ -170,7 +172,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
 
             for accumulated_idx in range(args.g_accumulated_times):
                 #gen_eeg = gen_net(eeg, epoch)
-                gen_eeg = gen_net(rec, epoch)       #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
+                gen_eeg = gen_net(rec, epoch)       #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
                 fake_validity = dis_net(gen_eeg)
 
                 # cal loss
@@ -194,7 +196,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
                     fake_image1, fake_image2 = gen_eeg[:args.gen_batch_size // 2], gen_eeg[args.gen_batch_size // 2:]
-                    eeg_random1, eeg_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
+                    #eeg_random1, eeg_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
+                    eeg_random1, eeg_random2 = rec[:args.gen_batch_size // 2], rec[args.gen_batch_size // 2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
                         torch.abs(eeg_random2 - eeg_random1))
                     eps = 1 * 1e-5
@@ -204,7 +207,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
                 else:
                     g_loss = -torch.mean(fake_validity)
                 g_loss = g_loss / float(args.g_accumulated_times)
-                g_loss.backward()                  #MODIFICA: AGGIUNTA RETAIN_GRAPH
+                g_loss.backward()                  
 
             torch.nn.utils.clip_grad_norm_(gen_net.parameters(), 5.)
             gen_optimizer.step()
@@ -230,10 +233,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, autoencoder: nn.Module, 
             # moving average weight
             for p, avg_p in zip(gen_net.parameters(), gen_avg_param):
                 cpu_p = deepcopy(p)
-                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)
-                #ema_beta_tensor = torch.tensor(ema_beta).cuda()
-                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)
-                #avg_p.mul_(ema_beta_tensor).add_(1. - ema_beta_tensor, cpu_p.cuda().data)
+                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI AVVIA DA 0 L'EXP
+                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI EFFETTUA IL RESUME
                 del cpu_p
 
             writer.add_scalar('g_loss', g_loss.item(), global_steps) if args.rank == 0 else 0
@@ -434,15 +435,17 @@ def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer
     return 0
 """
 
-def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, autoencoder, writer_dict, clean_dir=True):
+def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: nn.Module, writer_dict, clean_dir=True):
     # eval mode
     gen_net.eval()
     with torch.no_grad():
-        os.makedirs(f"./training_Output_With_Autoencoder/outputEpoch{epoch}", exist_ok=True)
+        os.makedirs(f"./training_output_lstm/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
-            rec = autoencoder(eeg.flatten(start_dim=1))     #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN E CHIAMATA AUTOENCODER    
-            sample_img = gen_net(rec, epoch)                #MODIFICA: OUTPUT AUTOENCODER USATO COME INPUT ALLA GAN
-            save_image(sample_img, f'./training_Output_With_Autoencoder/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+            #rec = autoencoder(eeg.flatten(start_dim=1))     #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN E CHIAMATA AUTOENCODER 
+            rec = lstm(eeg)
+            sample_img = gen_net(rec, epoch)                #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
+            #sample_img = gen_net(eeg, epoch)
+            save_image(sample_img, f'./training_output_lstm/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
 
 def get_topk_arch_hidden(args, controller, gen_net, prev_archs, prev_hiddens):
