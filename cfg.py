@@ -138,7 +138,7 @@ def parse_args():
         type=str,
         help='The reload model path')
     parser.add_argument(
-        '--autoencoder_path',
+        '--lstm_path',
         type=str,
         help='The reload model path')
     parser.add_argument(
@@ -182,14 +182,19 @@ def parse_args():
         help="choose a subject from 1 to 6, default is 0 (all subjects)")
     parser.add_argument(
         '--time_low',
-        default=20,
+        default=40,
         type=float,
         help="lowest time value")
     parser.add_argument(
         '--time_high',
-        default=460,
+        default=480,
         type=float,
         help="highest time value")
+    parser.add_argument(
+        '-mp','--model_params', 
+        default='', 
+        nargs='*', 
+        help='list of key=value pairs of model options')
     parser.add_argument('--init_type', type=str, default='normal',
                         choices=['normal', 'orth', 'xavier_uniform', 'false'],
                         help='The init type')
