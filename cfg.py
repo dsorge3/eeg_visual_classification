@@ -158,7 +158,7 @@ def parse_args():
     parser.add_argument(
         '--dataset',
         type=str,
-        default='cifar10',
+        default='eegdataset',
         help='dataset type')
     parser.add_argument(
         '--data_path',
@@ -168,7 +168,7 @@ def parse_args():
     parser.add_argument(
         '--eeg_dataset',
         type=str,
-        default="/projects/data/classification/eeg_cvpr_2017/eeg_5_95_std.pth",
+        default="/projects/data/classification/eeg_cvpr_2017/eeg_55_95_std.pth",
         help="EEG dataset path")
     parser.add_argument(
         '-mt',
