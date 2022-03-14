@@ -22,10 +22,9 @@ from tensorboardX import SummaryWriter
 from tqdm import tqdm
 from copy import deepcopy
 from adamw import AdamW
-import random
+import random 
 
-import importlib
-import models
+import lstm
 
 # torch.backends.cudnn.enabled = True
 # torch.backends.cudnn.benchmark = True
@@ -33,11 +32,11 @@ import models
 
 def main():
     args = cfg.parse_args()
-
-    #     _init_inception()
-    #     inception_path = check_or_download_inception(None)
-    #     create_inception_graph(inception_path)
-
+    
+#     _init_inception()
+#     inception_path = check_or_download_inception(None)
+#     create_inception_graph(inception_path)
+    
     if args.seed is not None:
         torch.manual_seed(args.random_seed)
         torch.cuda.manual_seed(args.random_seed)
@@ -67,11 +66,10 @@ def main():
     else:
         # Simply call main_worker function
         main_worker(args.gpu, ngpus_per_node, args)
-
-
+        
 def main_worker(gpu, ngpus_per_node, args):
     args.gpu = gpu
-
+    
     if args.gpu is not None:
         print("Use GPU: {} for training".format(args.gpu))
 
@@ -84,7 +82,6 @@ def main_worker(gpu, ngpus_per_node, args):
             args.rank = args.rank * ngpus_per_node + gpu
         dist.init_process_group(backend=args.dist_backend, init_method=args.dist_url,
                                 world_size=args.world_size, rank=args.rank)
-
     # weight init
     def weights_init(m):
         classname = m.__class__.__name__
@@ -97,15 +94,15 @@ def main_worker(gpu, ngpus_per_node, args):
                 nn.init.xavier_uniform(m.weight.data, 1.)
             else:
                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
-        #         elif classname.find('Linear') != -1:
-        #             if args.init_type == 'normal':
-        #                 nn.init.normal_(m.weight.data, 0.0, 0.02)
-        #             elif args.init_type == 'orth':
-        #                 nn.init.orthogonal_(m.weight.data)
-        #             elif args.init_type == 'xavier_uniform':
-        #                 nn.init.xavier_uniform(m.weight.data, 1.)
-        #             else:
-        #                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
+#         elif classname.find('Linear') != -1:
+#             if args.init_type == 'normal':
+#                 nn.init.normal_(m.weight.data, 0.0, 0.02)
+#             elif args.init_type == 'orth':
+#                 nn.init.orthogonal_(m.weight.data)
+#             elif args.init_type == 'xavier_uniform':
+#                 nn.init.xavier_uniform(m.weight.data, 1.)
+#             else:
+#                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
         elif classname.find('BatchNorm2d') != -1:
             nn.init.normal_(m.weight.data, 1.0, 0.02)
             nn.init.constant_(m.bias.data, 0.0)
@@ -115,7 +112,7 @@ def main_worker(gpu, ngpus_per_node, args):
     dis_net = eval('models_search.' + args.dis_model + '.Discriminator')(args=args)
     gen_net.apply(weights_init)
     dis_net.apply(weights_init)
-
+    
     if not torch.cuda.is_available():
         print('using CPU, this will be slow')
     elif args.distributed:
@@ -123,10 +120,10 @@ def main_worker(gpu, ngpus_per_node, args):
         # should always set the single device scope, otherwise,
         # DistributedDataParallel will use all available devices.
         if args.gpu is not None:
-
-            torch.cuda.set_device(args.gpu)            
-            gen_net = eval('models_search.' + args.gen_model + '.Generator')(args=args)
-            dis_net = eval('models_search.' + args.dis_model + '.Discriminator')(args=args)
+            
+            torch.cuda.set_device(args.gpu)
+            gen_net = eval('models_search.'+args.gen_model+'.Generator')(args=args)
+            dis_net = eval('models_search.'+args.dis_model+'.Discriminator')(args=args)
 
             gen_net.apply(weights_init)
             dis_net.apply(weights_init)
@@ -138,7 +135,7 @@ def main_worker(gpu, ngpus_per_node, args):
             args.dis_batch_size = int(args.dis_batch_size / ngpus_per_node)
             args.gen_batch_size = int(args.gen_batch_size / ngpus_per_node)
             args.batch_size = args.dis_batch_size
-
+            
             args.num_workers = int((args.num_workers + ngpus_per_node - 1) / ngpus_per_node)
             gen_net = torch.nn.parallel.DistributedDataParallel(gen_net, device_ids=[args.gpu], find_unused_parameters=True)
             dis_net = torch.nn.parallel.DistributedDataParallel(dis_net, device_ids=[args.gpu], find_unused_parameters=True)
@@ -157,31 +154,35 @@ def main_worker(gpu, ngpus_per_node, args):
         gen_net = torch.nn.DataParallel(gen_net).cuda()
         dis_net = torch.nn.DataParallel(dis_net).cuda()
     print(dis_net) if args.rank == 0 else 0
+        
 
     # set optimizer
     if args.optimizer == "adam":
         gen_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, gen_net.parameters()),
-                                         args.g_lr, (args.beta1, args.beta2))
+                                        args.g_lr, (args.beta1, args.beta2))
         dis_optimizer = torch.optim.Adam(filter(lambda p: p.requires_grad, dis_net.parameters()),
-                                         args.d_lr, (args.beta1, args.beta2))
+                                        args.d_lr, (args.beta1, args.beta2))
     elif args.optimizer == "adamw":
         gen_optimizer = AdamW(filter(lambda p: p.requires_grad, gen_net.parameters()),
-                              args.g_lr, weight_decay=args.wd)
+                                        args.g_lr, weight_decay=args.wd)
         dis_optimizer = AdamW(filter(lambda p: p.requires_grad, dis_net.parameters()),
-                              args.g_lr, weight_decay=args.wd)
+                                         args.g_lr, weight_decay=args.wd)
     gen_scheduler = LinearLrDecay(gen_optimizer, args.g_lr, 0.0, 0, args.max_iter * args.n_critic)
     dis_scheduler = LinearLrDecay(dis_optimizer, args.d_lr, 0.0, 0, args.max_iter * args.n_critic)
 
     # fid stat
-    # if args.dataset.lower() == 'cifar10':
-    #    fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
-    # elif args.dataset.lower() == 'stl10':
-    #    fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
-    # elif args.fid_stat is not None:
-    #    fid_stat = args.fid_stat
-    # else:
-    #    raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
-    # assert os.path.exists(fid_stat)
+    """
+    if args.dataset.lower() == 'cifar10':
+        fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
+    elif args.dataset.lower() == 'stl10':
+        fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
+    elif args.fid_stat is not None:
+        fid_stat = args.fid_stat
+    else:
+        raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
+    assert os.path.exists(fid_stat)
+    """
+
 
     # epoch number for dis_net
     args.max_epoch = args.max_epoch * args.n_critic
@@ -193,24 +194,28 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.max_iter:
         args.max_epoch = np.ceil(args.max_iter * args.n_critic / len(train_loader))
 
+
     # initial
     gen_avg_param = copy_params(gen_net, mode="gpu")
     start_epoch = 0
     best_fid = 1e4
 
-    #MODIFICA: DEFINIZIONE OGGETTO CLASSE AutoEncoder IMPORTATA       
-    #autoencoder = AutoEncoder(56320, num_hidden=5, embedding=100, add_factor=5)
-
     # Load model
-    model_options = {key: int(value) if value.isdigit() else (float(value) if value[0].isdigit() else value) for (key, value) in [x.split("=") for x in args.model_params]}
-    #Create discriminator lstm model
-    module = importlib.import_module("models." + args.model_type)
-    lstm = module.Model(**model_options)
-    #lstm = module.Model(128, 128, 1, 128)
-    
+    lstm_net = lstm.Model(128, 256, 1, 256)
+
     # set writer
     writer = None
     if args.load_path:
+        #CODICE USATO LA PRIMA VOLTA SOLO PER IL RESUME DI CIFAR CHECKPOINT E LA CREAZIONE DELL'NUOVO EXP
+        # create new log dir
+        """
+        assert args.exp_name
+        if args.rank == 0:
+            args.path_helper = set_log_dir('logs', args.exp_name)
+            logger = create_logger(args.path_helper['log_path'])
+            writer = SummaryWriter(args.path_helper['log_path'])
+        """
+
         print(f'=> resuming from {args.load_path}')
         assert os.path.exists(args.load_path)
         checkpoint_file = os.path.join(args.load_path)
@@ -219,39 +224,44 @@ def main_worker(gpu, ngpus_per_node, args):
         checkpoint = torch.load(checkpoint_file, map_location=loc)
         start_epoch = checkpoint['epoch']
         best_fid = checkpoint['best_fid']
-
+        
+        
         dis_net.load_state_dict(checkpoint['dis_state_dict'])
         gen_optimizer.load_state_dict(checkpoint['gen_optimizer'])
         dis_optimizer.load_state_dict(checkpoint['dis_optimizer'])
-
-        #         avg_gen_net = deepcopy(gen_net)
-        gen_avg_param = checkpoint['avg_gen_state_dict']
-        gen_net.load_state_dict(checkpoint['gen_state_dict'])
-        #         del avg_gen_net
-        #         gen_avg_param = list(p.cuda().to(f"cuda:{args.gpu}") for p in gen_avg_param)
-
-        args.path_helper = checkpoint['path_helper']
-        logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None
-        print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
-        writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None
-        #del checkpoint
         
+#         avg_gen_net = deepcopy(gen_net)
+        gen_avg_param = checkpoint['avg_gen_state_dict']       #CODICE MIO PER IL RESUME
+        gen_net.load_state_dict(checkpoint['gen_state_dict'])
+        #gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])   #CODICE LORO PER IL RESUME
+        #gen_avg_param = copy_params(gen_net, mode='gpu')            #CODICE LORO PER IL RESUME
+        #gen_net.load_state_dict(checkpoint['gen_state_dict'])       #CODICE LORO PER IL RESUME
+#         del avg_gen_net
+#         gen_avg_param = list(p.cuda().to(f"cuda:{args.gpu}") for p in gen_avg_param)
+        
+
+        args.path_helper = checkpoint['path_helper']            #COMMENTATO SOLO LA PRIMA VOLTA
+        logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
+        print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
+        writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
+        #del checkpoint
+
         print(f'=> resuming lstm from {args.lstm_path}')      #MODIFICA: RESUME LSTM NET
         assert os.path.exists(args.lstm_path)
         checkpoint_lstm = os.path.join(args.lstm_path)
         assert os.path.exists(checkpoint_lstm)
         loc = 'cuda:{}'.format(args.gpu)
-        #chkpoint = torch.load(checkpoint_lstm, map_location=loc)
-        #lstm.load_state_dict(chkpoint['model'])
-        lstm = torch.load(checkpoint_lstm, map_location=loc)
-        lstm.zero_grad()
-        lstm.eval()
-        lstm.to(torch.device("cuda"))
-        lstm = torch.nn.parallel.DistributedDataParallel(lstm, device_ids=[args.gpu], find_unused_parameters=False)
+        #lstm_dict = torch.load(checkpoint_lstm, map_location=loc)
+        lstm_dict = torch.load(checkpoint_lstm, map_location='cpu')
+        lstm_net.load_state_dict(lstm_dict)
+        lstm_net.zero_grad()
+        lstm_net.eval()
+        lstm_net = lstm_net.cuda()
+        #lstm_net.to(torch.device("cuda"))
+        lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)
         print(f'=> loaded checkpoint {checkpoint_lstm}')
         
         del checkpoint
-        #del chkpoint
     else:
         # create new log dir
         assert args.exp_name
@@ -265,15 +275,15 @@ def main_worker(gpu, ngpus_per_node, args):
         checkpoint_lstm = os.path.join(args.lstm_path)
         assert os.path.exists(checkpoint_lstm)
         loc = 'cuda:{}'.format(args.gpu)
-        #chkpoint = torch.load(checkpoint_lstm, map_location=loc)
-        #lstm.load_state_dict(chkpoint['model'])
-        lstm = torch.load(checkpoint_lstm, map_location=loc)
-        lstm.zero_grad()
-        lstm.eval()
-        lstm.to(torch.device("cuda"))
-        lstm = torch.nn.parallel.DistributedDataParallel(lstm, device_ids=[args.gpu], find_unused_parameters=False)
+        lstm_dict = torch.load(checkpoint_lstm, map_location=loc)
+        lstm_net.load_state_dict(lstm_dict)
+        lstm_net.zero_grad()
+        lstm_net.eval()
+        #lstm_net = lstm_net.cuda()
+        lstm_net.to(torch.device("cuda"))
+        lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)
         print(f'=> loaded checkpoint {checkpoint_lstm}')
-        
+    
     if args.rank == 0:
         logger.info(args)
     writer_dict = {
@@ -282,6 +292,7 @@ def main_worker(gpu, ngpus_per_node, args):
         'valid_global_steps': start_epoch // args.val_freq,
     }
 
+
     # train loop
     for epoch in range(int(start_epoch), int(args.max_epoch)):
         train_sampler.set_epoch(epoch)
@@ -289,12 +300,12 @@ def main_worker(gpu, ngpus_per_node, args):
         cur_stage = cur_stages(epoch, args)
         print("cur_stage " + str(cur_stage)) if args.rank == 0 else 0
         print(f"path: {args.path_helper['prefix']}") if args.rank == 0 else 0
-        train(args, gen_net, dis_net, lstm, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, lr_schedulers)
+        train(args, gen_net, dis_net, lstm_net, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, lr_schedulers)
         
         backup_param = copy_params(gen_net, mode="gpu")
         load_params(gen_net, gen_avg_param, args, mode="cpu")
-        save_samples(args, save_image_loader, None, epoch, gen_net, lstm, writer_dict)
-        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/training_output_lstm/outputEpoch{epoch}')
+        save_samples(args, save_image_loader, None, epoch, gen_net, lstm_net, writer_dict)
+        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/training_output_lstm/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
         load_params(gen_net, backup_param, args, mode="cpu")
         is_best = False
