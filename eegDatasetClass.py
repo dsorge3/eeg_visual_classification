@@ -67,5 +67,6 @@ class EEGDataset:
         #apply the transforms on the image
         if self.transform is not None:
             img = self.transform(img)
+
         # Return
         return eeg, label, img
