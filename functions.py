@@ -13,7 +13,7 @@ from utils.utils import make_grid, save_image
 from tqdm import tqdm
 import cv2
 
-from pytorch_gan_metrics.utils import get_inception_score
+from pytorch_gan_metrics.utils import get_inception_score_from_directory
 
 # from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
@@ -232,8 +232,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
             # moving average weight
             for p, avg_p in zip(gen_net.parameters(), gen_avg_param):
                 cpu_p = deepcopy(p)
-                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI AVVIA DA 0 L'EXP
-                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI EFFETTUA IL RESUME
+                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI AVVIA DA 0 L'EXP
+                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI EFFETTUA IL RESUME
                 del cpu_p
 
             writer.add_scalar('g_loss', g_loss.item(), global_steps) if args.rank == 0 else 0
@@ -438,15 +438,35 @@ def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: 
     # eval mode
     gen_net.eval()
     with torch.no_grad():
-        os.makedirs(f"./training_output_lstm/outputEpoch{epoch}", exist_ok=True)
+        os.makedirs(f"./training_output_lstm_randCrop32/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
-            #rec = autoencoder(eeg.flatten(start_dim=1))     #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN E CHIAMATA AUTOENCODER 
             rec = lstm(eeg, return_eeg_repr=True)
             sample_img = gen_net(rec, epoch)                #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
-            #sample_img = gen_net(eeg, epoch)
-            save_image(sample_img, f'./training_output_lstm/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+            save_image(sample_img, f'./training_output_lstm_randCrop32/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
+"""
+def images_IS_by_categories(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: nn.Module, writer_dict, clean_dir=True):
+    # eval mode
+    gen_net.eval()
+    with torch.no_grad():
+        for i, (eeg, label, imgs) in enumerate(train_loader):
+            rec = lstm(eeg, return_eeg_repr=True)
+            sample_img = gen_net(rec, epoch)
 
+            for i, x in enumerate(sample_img):
+                isExist = os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}')
+                if isExist == True:
+                    save_image(x, f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+                else:
+                    os.makedirs(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}', exist_ok=True)
+                    save_image(sample_img, f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)  
+
+        for i, (eeg, label, imgs) in enumerate(train_loader):
+            assert os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}')
+            IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}')
+            print("Inception Score Category", label[i], ":", IS)
+    return 0
+"""
 def get_topk_arch_hidden(args, controller, gen_net, prev_archs, prev_hiddens):
     """
     ~
