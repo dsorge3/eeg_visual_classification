@@ -12,6 +12,9 @@ module load cuda/10.1
 source /home/d.sorge/.bashrc
 conda activate venv
 
+#--fade_in 0
+#--load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/logs/cifar_eeg_lstm_train_2022_03_14_18_38_36/Model/checkpointForEpoch367
+
 CUDA_LAUNCH_BLOCKING=1 python train_derived.py \
 -gen_bs 128 \
 -dis_bs 64 \
@@ -49,12 +52,12 @@ CUDA_LAUNCH_BLOCKING=1 python train_derived.py \
 --val_freq 20 \
 --print_freq 50 \
 --grow_steps 0 0 \
---fade_in 0 \
+--fade_in 1 \
 --patch_size 2 \
 --ema_kimg 500 \
 --ema_warmup 0.1 \
 --ema 0.9999 \
 --diff_aug translation,cutout,color \
---load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/logs/cifar_eeg_lstm_train_2022_03_12_14_58_38/Model/checkpointForEpoch593 \
+--load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/cifar_checkpoint \
 --lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm_256_subject0_epoch_50.pth \
---exp_name cifar_eeg_lstm_train
+--exp_name cifar_eeg_lstm_train_randCrop
