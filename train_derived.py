@@ -186,7 +186,7 @@ def main_worker(gpu, ngpus_per_node, args):
 
     # epoch number for dis_net
     args.max_epoch = args.max_epoch * args.n_critic
-    dataset = datasets.ImageDataset(args, cur_img_size=8)
+    dataset = datasets.ImageDataset(args, cur_img_size=64)
     train_loader = dataset.train
     save_image_loader = dataset.train
     train_sampler = dataset.train_sampler
@@ -208,13 +208,13 @@ def main_worker(gpu, ngpus_per_node, args):
     if args.load_path:
         #CODICE USATO LA PRIMA VOLTA SOLO PER IL RESUME DI CIFAR CHECKPOINT E LA CREAZIONE DELL'NUOVO EXP
         # create new log dir
-        """
+        
         assert args.exp_name
         if args.rank == 0:
             args.path_helper = set_log_dir('logs', args.exp_name)
             logger = create_logger(args.path_helper['log_path'])
             writer = SummaryWriter(args.path_helper['log_path'])
-        """
+        
 
         print(f'=> resuming from {args.load_path}')
         assert os.path.exists(args.load_path)
@@ -231,19 +231,19 @@ def main_worker(gpu, ngpus_per_node, args):
         dis_optimizer.load_state_dict(checkpoint['dis_optimizer'])
         
 #         avg_gen_net = deepcopy(gen_net)
-        gen_avg_param = checkpoint['avg_gen_state_dict']       #CODICE MIO PER IL RESUME
-        gen_net.load_state_dict(checkpoint['gen_state_dict'])
-        #gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])   #CODICE LORO PER IL RESUME
-        #gen_avg_param = copy_params(gen_net, mode='gpu')            #CODICE LORO PER IL RESUME
-        #gen_net.load_state_dict(checkpoint['gen_state_dict'])       #CODICE LORO PER IL RESUME
+        #gen_avg_param = checkpoint['avg_gen_state_dict']       #CODICE MIO PER IL RESUME
+        #gen_net.load_state_dict(checkpoint['gen_state_dict'])
+        gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])   #CODICE LORO PER IL RESUME
+        gen_avg_param = copy_params(gen_net, mode='gpu')            #CODICE LORO PER IL RESUME
+        gen_net.load_state_dict(checkpoint['gen_state_dict'])       #CODICE LORO PER IL RESUME
 #         del avg_gen_net
 #         gen_avg_param = list(p.cuda().to(f"cuda:{args.gpu}") for p in gen_avg_param)
         
 
-        args.path_helper = checkpoint['path_helper']            #COMMENTATO SOLO LA PRIMA VOLTA
-        logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
+        #args.path_helper = checkpoint['path_helper']            #COMMENTATO SOLO LA PRIMA VOLTA
+        #logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
         print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
-        writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
+        #writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
         #del checkpoint
 
         print(f'=> resuming lstm from {args.lstm_path}')      #MODIFICA: RESUME LSTM NET
@@ -292,6 +292,10 @@ def main_worker(gpu, ngpus_per_node, args):
         'valid_global_steps': start_epoch // args.val_freq,
     }
 
+    """
+    images_IS_by_categories(args, save_image_loader, None, 367, gen_net, lstm_net, writer_dict)
+    exit()
+    """
 
     # train loop
     for epoch in range(int(start_epoch), int(args.max_epoch)):
@@ -305,7 +309,7 @@ def main_worker(gpu, ngpus_per_node, args):
         backup_param = copy_params(gen_net, mode="gpu")
         load_params(gen_net, gen_avg_param, args, mode="cpu")
         save_samples(args, save_image_loader, None, epoch, gen_net, lstm_net, writer_dict)
-        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/training_output_lstm/outputEpoch{epoch}')
+        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/training_output_lstm_randCrop32/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
         load_params(gen_net, backup_param, args, mode="cpu")
         is_best = False
