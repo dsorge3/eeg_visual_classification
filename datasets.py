@@ -9,7 +9,7 @@ import torch.distributed as dist
 class ImageDataset(object):
     def __init__(self, args, cur_img_size=None, bs=None):
         bs = args.dis_batch_size if bs == None else bs
-        img_size = cur_img_size if args.fade_in > 0 else args.img_size
+        img_size = cur_img_size if args.fade_in > 0 else args.img_size   
         if args.dataset.lower() == 'cifar10':
             Dt = datasets.CIFAR10
             transform = transforms.Compose([
@@ -73,9 +73,10 @@ class ImageDataset(object):
             transform = transforms.Compose([
                 transforms.ToPILImage(),
                 transforms.Resize(size=(img_size, img_size)),
+                transforms.RandomCrop(32),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
-                transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+                transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
 
             train_dataset = Dt(eeg_signals_path=args.eeg_dataset, split_path=args.splits_path, split_num=args.split_num, transform=transform)
