@@ -1,0 +1,402 @@
+# Define options
+import argparse
+parser = argparse.ArgumentParser(description="Template")
+# Dataset options
+
+#Data - Data needs to be pre-filtered and filtered data is available
+
+### BLOCK DESIGN ###
+#Data
+parser.add_argument('-ed', '--eeg-dataset', default="/projects/data/classification/eeg_cvpr_2017/eeg_55_95_std.pth", help="EEG dataset path") #55-95Hz
+#parser.add_argument('-ed', '--eeg-dataset', default="/projects/data/classification/eeg_cvpr_2017/eeg_5_95_std.pth", help="EEG dataset path") #5-95Hz
+#parser.add_argument('-ed', '--eeg-dataset', default=r"data\block\eeg_14_70_std.pth", help="EEG dataset path") #14-70Hz
+#Splits
+parser.add_argument('-sp', '--splits-path', default="/projects/data/classification/eeg_cvpr_2017/block_splits_by_image_all.pth", help="splits path") #All subjects
+#parser.add_argument('-sp', '--splits-path', default=r"data\block\block_splits_by_image_single.pth", help="splits path") #Single subject
+### BLOCK DESIGN ###
+
+parser.add_argument('-sn', '--split-num', default=0, type=int, help="split number") #leave this always to zero.
+
+#Subject selecting
+parser.add_argument('-sub','--subject', default=0   , type=int, help="choose a subject from 1 to 6, default is 0 (all subjects)")
+
+#Time options: select from 20 to 460 samples from EEG data
+parser.add_argument('-tl', '--time_low', default=40, type=float, help="lowest time value")
+parser.add_argument('-th', '--time_high', default=480,  type=float, help="highest time value")
+
+# Model type/options
+parser.add_argument('-mt','--model_type', default='lstm', help='specify which generator should be used: lstm|EEGChannelNet')
+# It is possible to test out multiple deep classifiers:
+# - lstm is the model described in the paper "Deep Learning Human Mind for Automated Visual Classification”, in CVPR 2017
+# - model10 is the model described in the paper "Decoding brain representations by multimodal learning of neural activity and visual features", TPAMI 2020
+parser.add_argument('-mp','--model_params', default='', nargs='*', help='list of key=value pairs of model options')
+parser.add_argument('--pretrained_net', default='', help="path to pre-trained net (to continue training)")
+parser.add_argument('--log_dir', default='', help="(to continue training)")
+parser.add_argument('--name', default='', type=str)
+
+# Training options
+parser.add_argument("-b", "--batch_size", default=16, type=int, help="batch size")
+parser.add_argument('-o', '--optim', default="Adam", help="optimizer")
+parser.add_argument('-lr', '--learning-rate', default=0.0001, type=float, help="learning rate")
+parser.add_argument('-lrdb', '--learning-rate-decay-by', default=0.5, type=float, help="learning rate decay factor")
+parser.add_argument('-lrde', '--learning-rate-decay-every', default=10, type=int, help="learning rate decay period")
+parser.add_argument('-dw', '--data-workers', default=4, type=int, help="data loading workers")
+parser.add_argument('-e', '--epochs', default=200, type=int, help="training epochs")
+parser.add_argument('-osz', '--output_size', default=256, type=int, help="lstm output size")
+
+# Save options
+parser.add_argument('-sc', '--saveCheck', default=1, type=int, help="learning rate")
+
+# Backend options
+parser.add_argument('--no-cuda', default=False, help="disable CUDA", action="store_true")
+
+# Parse arguments
+opt = parser.parse_args()
+print(opt)
+
+# Imports
+import sys
+import os
+import random
+import math
+import time
+import torch; torch.utils.backcompat.broadcast_warning.enabled = True
+from torch.utils.data import DataLoader
+from torchvision import transforms, datasets
+import torch.nn as nn
+import torch.nn.functional as F
+import torch.optim
+import torch.backends.cudnn as cudnn; cudnn.benchmark = True
+from scipy.fftpack import fft, rfft, fftfreq, irfft, ifft, rfftfreq
+from scipy import signal
+import numpy as np
+import models
+import importlib
+from tqdm import tqdm
+from tensorboardX import SummaryWriter
+from datetime import datetime
+
+# Imports for Confusion Matrix
+import matplotlib.pyplot as plt
+from sklearn.metrics import confusion_matrix
+import seaborn as sn
+import pandas as pd
+
+# Dataset class
+class EEGDataset:
+    
+    # Constructor
+    def __init__(self, eeg_signals_path):
+        # Load EEG signals
+        loaded = torch.load(eeg_signals_path)
+        if opt.subject!=0:
+            self.data = [loaded['dataset'][i] for i in range(len(loaded['dataset']) ) if loaded['dataset'][i]['subject']==opt.subject]
+        else:
+            #self.data=loaded['dataset']
+            # MODIFICA: CARICO IN DATA SOLO LE 4 CLASSI CON MAGGIOR ACCURACY
+            self.data = []  
+            self.data.extend([loaded['dataset'][5], loaded['dataset'][10], loaded['dataset'][36], loaded['dataset'][39]])    
+        self.labels = loaded["labels"]
+        self.images = loaded["images"]
+        
+        # Compute size
+        self.size = len(self.data)
+
+    # Get size
+    def __len__(self):
+        return self.size
+
+    # Get item
+    def __getitem__(self, i):
+        # Process EEG
+        eeg = self.data[i]["eeg"].float().t()
+        #print("eeg shape", eeg.shape)
+        eeg = eeg[int(opt.time_low):int(opt.time_high),:]
+
+        if opt.model_type == "model10":
+            eeg = eeg.t()
+            eeg = eeg.view(1,128,opt.time_high-opt.time_low)
+        # Get label
+        label = self.data[i]["label"]
+        # Return
+        return eeg, label
+    """
+    def get3(self, i):
+        return self.labels_new[i], self.data[i]['label']
+    
+    def get4(self, i):
+        return self.data[i]["eeg"]
+    """
+
+# Splitter class
+class Splitter:
+
+    def __init__(self, dataset, split_path, split_num=0, split_name="train"):
+        # Set EEG dataset
+        self.dataset = dataset
+        # Load split
+        loaded = torch.load(split_path)
+        #self.split_idx = loaded["splits"][split_num][split_name]
+        # MODIFICA: CARICO IN split_idx SOLO LE 4 CLASSI CON MAGGIOR ACCURACY
+        self.split_idx = []
+        self.split_idx.extend([loaded["splits"][split_num][split_name][5], loaded["splits"][split_num][split_name][10], loaded["splits"][split_num][split_name][36], loaded["splits"][split_num][split_name][39]])
+        
+        for i in range(len(self.split_idx)):
+            self.split_idx[i] = i
+
+        """
+        for i in range(len(self.split_idx)):
+            print("split_idx", i, "=", self.split_idx[i])
+
+        for i in range(len(self.dataset.data)):
+            print("data_eeg", i, "=", self.dataset.data[i]["eeg"])
+
+        exit()
+        """
+        
+        # Filter data
+        self.split_idx = [i for i in self.split_idx if 450 <= self.dataset.data[i]["eeg"].size(1) <= 600]
+        # Compute size
+        self.size = len(self.split_idx)
+
+    # Get size
+    def __len__(self):
+        return self.size
+
+    # Get item
+    def __getitem__(self, i):
+        # Get sample from dataset
+        eeg, label = self.dataset[self.split_idx[i]]
+        # Return
+        return eeg, label
+
+    """
+    def get(self, i):
+        return self.split_idx[i]
+    """
+
+
+# Load dataset
+dataset = EEGDataset(opt.eeg_dataset)    
+
+"""
+ldt = dataset.get()
+print("Loaded dataset", ldt)
+image = dataset.get1()
+print("self.data[0]['image']", image)
+img = dataset.get4()
+print("images[0]", img)
+"""
+
+# Create loaders
+loaders = {split: DataLoader(Splitter(dataset, split_path = opt.splits_path, split_num = opt.split_num, split_name = split), batch_size = opt.batch_size, drop_last = False, shuffle = False) for split in ["train", "val", "test"]}
+
+# Load model
+model_options = {key: int(value) if value.isdigit() else (float(value) if value[0].isdigit() else value) for (key, value) in [x.split("=") for x in opt.model_params]}
+
+# Create discriminator model/optimizer
+module = importlib.import_module("models." + opt.model_type)
+model = module.Model(**model_options)
+print(model)
+optimizer = getattr(torch.optim, opt.optim)(model.parameters(), lr = opt.learning_rate)
+
+"""
+for i in range(dataset.__len__()):
+    lab, data_lab = dataset.get3(i)
+    #sp_idx = split.get(i)
+    data_eeg = dataset.get4(i)
+    print("data_eeg", i, "=", data_eeg)
+    print("labels", i, "=", lab)
+    print("data_lab", i, "=", data_lab)
+    #print("sp_idx", i, "=", sp_idx)
+exit()
+"""
+
+"""
+if opt.pretrained_net != '':
+        
+        print(f'=> resuming lstm from {opt.pretrained_net}')      #MODIFICA: RESUME LSTM NET
+        assert os.path.exists(opt.pretrained_net)
+        checkpoint_lstm = os.path.join(opt.pretrained_net)
+        assert os.path.exists(checkpoint_lstm)
+        #loc = 'cuda:{}'.format(args.gpu)
+        lstm_dict = torch.load(checkpoint_lstm, map_location='cpu')
+        model.load_state_dict(lstm_dict)
+        model.zero_grad()
+        model.eval()
+        #lstm_net = lstm_net.cuda()
+        #lstm_net.to(torch.device("cuda"))
+        #lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)
+        print(f'=> loaded checkpoint {checkpoint_lstm}')
+
+# **** COSTRUZIONE MATRICE CONFUSIONE ****
+y_pred = []
+y_true = []
+
+for split in ("train", "val", "test"):
+        # Set network mode
+        if split == "test":
+            model.eval()
+            torch.set_grad_enabled(False)  
+            # iterate over test data
+            for inputs, labels in loaders[split]:
+                    output = model(inputs) # Feed Network
+
+                    output = (torch.max(torch.exp(output), 1)[1]).data.cpu().numpy()
+                    y_pred.extend(output) # Save Prediction
+                        
+                    labels = labels.data.cpu().numpy()
+                    y_true.extend(labels) # Save Truth
+
+# constant for classes
+classes = ('Sorrel', 'Parachute', 'Iron', 'Anemone fish', 'Espresso maker',
+        'Mug', 'Mountain bike', 'Revolver', 'Panda', 'Daisy', 'Canoe', 'Lycaenid butterfly', 
+        'German shepherd', 'Running shoe', 'Jack-o’-lantern', 'Cellphone', 'Golf ball', 'Desktop PC', 
+        'Broom', 'Pizza', 'Missile', 'Capuchin', 'Pool table', 'Mailbag', 'Convertible', 
+        'Folding chair', 'Pyjama', 'Mitten', 'Electric guitar', 'Reflex camera', 'Piano', 'Mountain tent', 
+        'Banana', 'Bolete', 'Digital watch', 'Elephant', 'Airliner', 'Electric locomotive', 'Radio telescope', 'Egyptian cat')
+
+# Build confusion matrix
+cf_matrix = confusion_matrix(y_true, y_pred)
+df_cm = pd.DataFrame(cf_matrix/np.sum(cf_matrix) *10, index = [i for i in classes],
+                     columns = [i for i in classes])
+plt.figure(figsize = (30,20))
+sn.heatmap(df_cm, annot=True)
+plt.savefig('output.png')
+exit()
+#print("\nSum of arr (keepdimension is True): \n", np.sum(cf_matrix, axis = 1, dtype = np.float32, keepdims = True))
+"""
+      
+# Setup CUDA
+if not opt.no_cuda:
+    model.cuda()
+    print("Copied to CUDA")
+
+if opt.pretrained_net != '':
+        model = torch.load(opt.pretrained_net)
+        print(model)
+        
+        log_dir = opt.log_dir
+
+        train_logdir = os.path.join(log_dir, 'train')
+        train_writer = SummaryWriter(train_logdir)
+
+        val_logdir = os.path.join(log_dir, 'val')
+        val_writer = SummaryWriter(val_logdir)
+
+        test_logdir = os.path.join(log_dir, 'test')
+        test_writer = SummaryWriter(test_logdir)
+else:
+    # create new log dir
+    log_dir = os.path.join("logs/fit", opt.name, datetime.now().strftime("%Y%m%d-%H%M%S"))
+
+    train_logdir = os.path.join(log_dir, 'train')
+    os.makedirs(train_logdir, exist_ok=True)
+    train_writer = SummaryWriter(train_logdir)
+
+    val_logdir = os.path.join(log_dir, 'val')
+    os.makedirs(val_logdir, exist_ok=True)
+    val_writer = SummaryWriter(val_logdir)
+
+    test_logdir = os.path.join(log_dir, 'test')
+    os.makedirs(test_logdir, exist_ok=True)
+    test_writer = SummaryWriter(test_logdir)
+
+#initialize training,validation, test losses and accuracy list
+losses_per_epoch={"train":[], "val":[],"test":[]}
+accuracies_per_epoch={"train":[],"val":[],"test":[]}
+
+best_accuracy = 0
+best_accuracy_val = 0
+best_epoch = 0
+# Start training
+
+predicted_labels = [] 
+correct_labels = []
+
+for epoch in range(1, opt.epochs+1):
+    # Initialize loss/accuracy variables
+    losses = {"train": 0, "val": 0, "test": 0}
+    accuracies = {"train": 0, "val": 0, "test": 0}
+    counts = {"train": 0, "val": 0, "test": 0}
+    # Adjust learning rate for SGD
+    if opt.optim == "SGD":
+        lr = opt.learning_rate * (opt.learning_rate_decay_by ** (epoch // opt.learning_rate_decay_every))
+        for param_group in optimizer.param_groups:
+            param_group['lr'] = lr
+    # Process each split
+    for split in ("train", "val", "test"):
+        total_steps = len(loaders[split])
+        # Set network mode
+        if split == "train":
+            model.train()
+            torch.set_grad_enabled(True)
+        else:
+            model.eval()
+            torch.set_grad_enabled(False)  
+        # Process all split batches
+        for step, (input, target) in enumerate(tqdm(loaders[split])):
+            # Check CUDA
+            if not opt.no_cuda:
+                input = input.to("cuda") 
+                target = target.to("cuda") 
+            # Forward
+            print("input shape", input.shape)
+            print("target shape", target.shape)
+            output = model(input)
+            print("out shape", output.shape)
+
+            # Compute loss
+            loss = F.cross_entropy(output, target)
+            losses[split] += loss.item()
+            # Compute accuracy
+            _,pred = output.data.max(1)
+            correct = pred.eq(target.data).sum().item()
+            accuracy = correct/input.data.size(0)   
+            accuracies[split] += accuracy
+            counts[split] += 1
+            # Backward and optimize
+            if split == "train":
+                optimizer.zero_grad()
+                loss.backward()
+                optimizer.step()
+        
+        if split == "train":
+            train_writer.add_scalar("Loss/epoch", losses[split] / total_steps, epoch + 1)
+            train_writer.add_scalar("Accuracy/epoch", accuracies[split]/counts[split], epoch + 1)
+        elif split == "val":
+            val_writer.add_scalar("Loss/epoch", losses[split] / total_steps, epoch + 1)
+            val_writer.add_scalar("Accuracy/epoch", accuracies[split]/counts[split], epoch + 1)
+        else:
+            test_writer.add_scalar("Loss/epoch", losses[split] / total_steps, epoch + 1)
+            test_writer.add_scalar("Accuracy/epoch", accuracies[split]/counts[split], epoch + 1)
+    
+    # Print info at the end of the epoch
+    if accuracies["val"]/counts["val"] >= best_accuracy_val:
+        best_accuracy_val = accuracies["val"]/counts["val"]
+        best_accuracy = accuracies["test"]/counts["test"]
+        best_epoch = epoch
+    
+    TrL,TrA,VL,VA,TeL,TeA = losses["train"]/counts["train"],accuracies["train"]/counts["train"],losses["val"]/counts["val"],accuracies["val"]/counts["val"],losses["test"]/counts["test"],accuracies["test"]/counts["test"]
+    print("Model: {11} - Subject {12} - Time interval: [{9}-{10}]  [{9}-{10} Hz] - Epoch {0}: TrL={1:.4f}, TrA={2:.4f}, VL={3:.4f}, VA={4:.4f}, TeL={5:.4f}, TeA={6:.4f}, TeA at max VA = {7:.4f} at epoch {8:d}".format(epoch,
+                                                                                                         losses["train"]/counts["train"],
+                                                                                                         accuracies["train"]/counts["train"],
+                                                                                                         losses["val"]/counts["val"],
+                                                                                                         accuracies["val"]/counts["val"],
+                                                                                                         losses["test"]/counts["test"],
+                                                                                                         accuracies["test"]/counts["test"],
+                                                                                                         best_accuracy, best_epoch, opt.time_low, opt.time_high, opt.model_type, opt.subject))
+    losses_per_epoch['train'].append(TrL)
+    losses_per_epoch['val'].append(VL)
+    losses_per_epoch['test'].append(TeL)
+    accuracies_per_epoch['train'].append(TrA)
+    accuracies_per_epoch['val'].append(VA)
+    accuracies_per_epoch['test'].append(TeA)
+
+    if epoch%opt.saveCheck == 0:
+                state_dict = model.state_dict()
+                torch.save(state_dict, '%s_%d_subject%d_epoch_%d.pth' % (opt.model_type, opt.output_size, opt.subject, epoch))
+
+train_writer.close()
+val_writer.close()
+test_writer.close()
