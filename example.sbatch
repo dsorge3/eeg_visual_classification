@@ -12,8 +12,6 @@ module load cuda/10.1
 source /home/d.sorge/.bashrc
 conda activate venv
 
-#--latent_dim 56320
-
 python train_derived.py \
 -gen_bs 16 \
 -dis_bs 16 \
@@ -36,7 +34,7 @@ python train_derived.py \
 --df_dim 384 \
 --d_depth 3 \
 --g_depth 5,4,2,2 \
---latent_dim 128 \
+--latent_dim 56320 \
 --gf_dim 256 \
 --num_workers 0 \
 --g_lr 0.0001 \
@@ -58,5 +56,4 @@ python train_derived.py \
 --patch_size 2 \
 --diff_aug filter,translation,erase_ratio,color,hue \
 --ema 0.995 \
---lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm__subject0_epoch_200.pth \
---exp_name eeg_train_lstm
+--exp_name eeg_train
