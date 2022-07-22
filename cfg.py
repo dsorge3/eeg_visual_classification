@@ -158,7 +158,7 @@ def parse_args():
     parser.add_argument(
         '--dataset',
         type=str,
-        default='eegdataset',
+        default='cifar10',
         help='dataset type')
     parser.add_argument(
         '--data_path',
