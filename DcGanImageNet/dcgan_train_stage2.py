@@ -169,7 +169,6 @@ class Discriminator(nn.Module):
         return self.main3(x)
 
 def eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, writer, eval_loader, eval_data, type, epoch):
-#def eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, writer, eval_loader, type, epoch):                #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
     ds_test = tqdm.tqdm(eval_loader)
     G_losses = 0.0
     D_losses = 0.0
@@ -181,7 +180,6 @@ def eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, writer
         total = 0.0
         correct = 0.0
         for step, (x, y, img) in enumerate(ds_test):
-        #for step, (img, y) in enumerate(ds_test):         #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
 
             eeg = x.to(device)  # SOSTITUITO CON L'EEG dal dataset
             with torch.no_grad():                             
@@ -190,14 +188,6 @@ def eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, writer
 
             z = torch.normal(mean=0, std=1, size=rec.shape).cuda()   
             rec_z = torch.cat((rec, z), dim=1)
-
-            """
-            #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-            #rec = torch.zeros(128).cuda()
-            rec = torch.zeros([img.shape[0], 128, 1, 1]).cuda()
-            z = torch.normal(mean=0, std=1, size=rec.shape).cuda()
-            rec_z = torch.cat((rec, z), dim=1)
-            """
 
             # Format batch
             real_cpu = img.to(device)
@@ -237,8 +227,6 @@ def eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, writer
 
             errD = errD_real + errD_fake + errD_real_wrong
             
-            #errD = errD_real + errD_fake    #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-
             ############################
             # (2) Update G network: maximize log(D(G(z)))
             ###########################
@@ -271,16 +259,6 @@ def main():
         transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
     ])
     
-    """
-    #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-    transform = transforms.Compose([
-        transforms.ToTensor(),
-        transforms.Resize(size=(96, 96)),
-        transforms.RandomCrop(args.image_size),
-        transforms.RandomHorizontalFlip(),
-        transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
-    ])
-    """
 
     train_data = Dt(eeg_signals_path=args.eeg_dataset, split_path=args.splits_path, split_num=args.split_num, transform=transform)
     val_data = Dt(eeg_signals_path=args.eeg_dataset, split_path=args.splits_path, split_num=args.split_num, transform=transform, split_name="val")
@@ -289,16 +267,6 @@ def main():
     train_dataloader = torch.utils.data.DataLoader(train_data, batch_size=args.batch_size, shuffle=True, drop_last=True, num_workers=8)
     val_dataloader = torch.utils.data.DataLoader(val_data, batch_size=args.batch_size, shuffle=False, num_workers=8)
     test_dataloader = torch.utils.data.DataLoader(test_data, batch_size=args.batch_size, shuffle=False, num_workers=8)
-
-    """
-    #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-    imagenet_train_data = dset.ImageNet(root='/projects/data/classification/ImageNet2012/', transform=transform)
-    imagenet_val_data = dset.ImageNet(root='/projects/data/classification/ImageNet2012/', split="val", transform=transform)
-
-    train_dataloader = torch.utils.data.DataLoader(imagenet_train_data, batch_size=args.batch_size, shuffle=True, num_workers=8)
-    val_dataloader = torch.utils.data.DataLoader(imagenet_val_data, batch_size=args.batch_size, shuffle=False, num_workers=8)
-    test_dataloader = torch.utils.data.DataLoader(imagenet_val_data, batch_size=args.batch_size, shuffle=False, num_workers=8)
-    """
     
     # Decide which device we want to run on
     device = torch.device("cuda:0" if (torch.cuda.is_available() and args.ngpu > 0) else "cpu")
@@ -415,7 +383,6 @@ def main():
 
     print("Starting Training Loop...")
     # For each epoch
-    #for epoch in range(num_epochs):
     for epoch in range(int(start_epoch), int(args.num_epochs)):
         # For each batch in the dataloader
         ds_train = tqdm.tqdm(train_dataloader)
@@ -424,7 +391,6 @@ def main():
         total_steps = len(train_dataloader)
         total = 0.0
         for step, (x, y, img) in enumerate(ds_train):
-        #for step, (img, y) in enumerate(ds_train):         #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
 
             eeg = x.to(device)  # SOSTITUITO CON L'EEG dal dataset
             with torch.no_grad():                             
@@ -433,14 +399,6 @@ def main():
 
             z = torch.normal(mean=0, std=1, size=rec.shape).cuda()   
             rec_z = torch.cat((rec, z), dim=1)
-
-            """
-            #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-            #rec = torch.zeros(128).cuda()
-            rec = torch.zeros([img.shape[0], 128, 1, 1]).cuda()
-            z = torch.normal(mean=0, std=1, size=rec.shape).cuda()
-            rec_z = torch.cat((rec, z), dim=1)
-            """
 
             ############################
             # (1) Update D network: maximize log(D(x)) + log(1 - D(G(z)))
@@ -493,8 +451,6 @@ def main():
             # Compute error of D as sum over the fake and the real batches
             errD = errD_real + errD_fake + errD_real_wrong
             
-            #errD = errD_real + errD_fake        #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-
             # Update D
             optimizerD.step()
 
@@ -517,14 +473,6 @@ def main():
             print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(wx): %.4f\tD(G(z)): %.4f / %.4f'
                 % (epoch, args.num_epochs, step, len(train_dataloader),
                     errD.item(), errG.item(), D_x, D_G_z1, D_G_z_real_wrong, D_G_z2))
-            
-            """
-            #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-            # Output training stats
-            print('[%d/%d][%d/%d]\tLoss_D: %.4f\tLoss_G: %.4f\tD(x): %.4f\tD(G(z)): %.4f / %.4f'
-                % (epoch, args.num_epochs, step, len(train_dataloader),
-                    errD.item(), errG.item(), D_x, D_G_z1, D_G_z2))
-            """
 
             # Save Losses for plotting later
             G_losses += errG.cpu().item()
@@ -537,8 +485,6 @@ def main():
 
         eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, val_writer, val_dataloader, val_data, type="Val", epoch=epoch)
         eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, test_writer, test_dataloader, test_data, type="Test", epoch=epoch)
-        #eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, val_writer, val_dataloader, type="Val", epoch=epoch)                  #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
-        #eval(netG, netD, lstm_net, criterion, device, real_label, fake_label, test_writer, test_dataloader, type="Test", epoch=epoch)               #MODIFICA: ADDESTRAMENTO SU IMAGENET X 100 EPOCHE
 
         save_samples(ds_train, epoch, netG, lstm_net)
         IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/dcgan/training_output_128lstm2class/outputEpoch{epoch}')
