@@ -13,7 +13,7 @@ from utils.utils import make_grid, save_image
 from tqdm import tqdm
 import cv2
 
-from pytorch_gan_metrics.utils import get_inception_score_from_directory
+from pytorch_gan_metrics.utils import get_inception_score
 
 # from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
@@ -78,7 +78,7 @@ def compute_gradient_penalty(D, real_samples, fake_samples, phi):
     return gradient_penalty
 
 
-def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, schedulers=None):
+def train(args, gen_net: nn.Module, dis_net: nn.Module, gen_optimizer, dis_optimizer, gen_avg_param, train_loader, epoch, writer_dict, schedulers=None):
     writer = writer_dict['writer']
     gen_step = 0
     # train mode
@@ -100,11 +100,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         # ---------------------
 
         real_validity = dis_net(real_imgs)
-        #eeg = torch.flatten(eeg, start_dim=1)          #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
-        with torch.no_grad():                           #MODIFICA: AGGIUNTA DI TORCH.NO_GRAD
-            rec = lstm(eeg, return_eeg_repr=True)       #MODIFICA: AGGIUNTA CHIAMATA LSTM
-        fake_imgs = gen_net(rec, epoch).detach()        #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
-        #fake_imgs = gen_net(eeg, epoch).detach()
+        fake_imgs = gen_net(eeg, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
 
@@ -170,8 +166,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
 
             for accumulated_idx in range(args.g_accumulated_times):
-                #gen_eeg = gen_net(eeg, epoch)
-                gen_eeg = gen_net(rec, epoch)       #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
+                gen_eeg = gen_net(eeg, epoch)
                 fake_validity = dis_net(gen_eeg)
 
                 # cal loss
@@ -195,8 +190,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
                     fake_image1, fake_image2 = gen_eeg[:args.gen_batch_size // 2], gen_eeg[args.gen_batch_size // 2:]
-                    #eeg_random1, eeg_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
-                    eeg_random1, eeg_random2 = rec[:args.gen_batch_size // 2], rec[args.gen_batch_size // 2:]
+                    eeg_random1, eeg_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
                         torch.abs(eeg_random2 - eeg_random1))
                     eps = 1 * 1e-5
@@ -242,11 +236,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         # verbose
         if gen_step and iter_idx % args.print_freq == 0 and args.rank == 0:
             sample_imgs = torch.cat((gen_eeg[:16], real_imgs[:16]), dim=0)
-            #             scale_factor = args.img_size // int(sample_imgs.size(3))
-            #             sample_imgs = torch.nn.functional.interpolate(sample_imgs, scale_factor=2)
-            #             img_grid = make_grid(sample_imgs, nrow=4, normalize=True, scale_each=True)
-            #             save_image(sample_imgs, f'sampled_images_{args.exp_name}.jpg', nrow=4, normalize=True, scale_each=True)
-            # writer.add_image(f'sampled_images_{args.exp_name}', img_grid, global_steps)
             tqdm.write(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [ema: %f] " %
                 (epoch, args.max_epoch, iter_idx % len(train_loader), len(train_loader), d_loss.item(), g_loss.item(),
@@ -395,78 +384,16 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
 
     return mean, -9999
 
-"""
-def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
-    # eval mode
-    gen_net.eval()
-    with torch.no_grad():
-        # generate images
-        batch_size = fixed_z.size(0)
-        sample_imgs = []
-        for i in range(fixed_z.size(0)):
-            sample_img = gen_net(fixed_z[i:(i + 1)], epoch)
-            sample_imgs.append(sample_img)
-        sample_imgs = torch.cat(sample_imgs, dim=0)
-        os.makedirs(f"./samples/{args.exp_name}", exist_ok=True)
-        save_image(sample_imgs, f'./samples/{args.exp_name}/sampled_images_{epoch}.png', nrow=10, normalize=True,
-                   scale_each=True)
-    return 0
-"""
-
-"""
-def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
-    #parent_dir = "/home/d.sorge/eeg_visual_classification"
-    # eval mode
-    gen_net.eval()
-    with torch.no_grad():
-        # generate images
-        sample_imgs = []
-        for i, (eeg, label, imgs) in enumerate(train_loader):
-            sample_img = gen_net(eeg, epoch)
-            sample_imgs.append(sample_img)
-        sample_imgs = torch.cat(sample_imgs, dim=0)
-        #directory = "/outputEpoch{epoch}"
-        #path = os.path.join(parent_dir, directory)
-        #os.makedirs(path)
-        os.makedirs(f"./outputEpoch{epoch}", exist_ok=True)
-        save_image(sample_imgs, f'./outputEpoch{epoch}/sampled_images_{epoch}.png', nrow=10, normalize=True,
-                   scale_each=True)
-    return 0
-"""
-
 def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: nn.Module, writer_dict, clean_dir=True):
     # eval mode
     gen_net.eval()
     with torch.no_grad():
-        os.makedirs(f"./training_output_lstm_randCrop32/outputEpoch{epoch}", exist_ok=True)
+        os.makedirs(f"./training_output_lstm/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
-            rec = lstm(eeg, return_eeg_repr=True)
-            sample_img = gen_net(rec, epoch)                #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
-            save_image(sample_img, f'./training_output_lstm_randCrop32/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+            sample_img = gen_net(eeg, epoch)
+            save_image(sample_img, f'./training_output/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
-"""
-def images_IS_by_categories(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: nn.Module, writer_dict, clean_dir=True):
-    # eval mode
-    gen_net.eval()
-    with torch.no_grad():
-        for i, (eeg, label, imgs) in enumerate(train_loader):
-            rec = lstm(eeg, return_eeg_repr=True)
-            sample_img = gen_net(rec, epoch)
 
-            for i, x in enumerate(sample_img):
-                isExist = os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}')
-                if isExist == True:
-                    save_image(x, f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
-                else:
-                    os.makedirs(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}', exist_ok=True)
-                    save_image(sample_img, f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)  
-
-        for i, (eeg, label, imgs) in enumerate(train_loader):
-            assert os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}')
-            IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/outputLabel{label[i]}')
-            print("Inception Score Category", label[i], ":", IS)
-    return 0
-"""
 def get_topk_arch_hidden(args, controller, gen_net, prev_archs, prev_hiddens):
     """
     ~
