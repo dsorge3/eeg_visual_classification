@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=VisualImagCifar4ClassLstm128
+#SBATCH --job-name=VisualImagCifarLstm128
 #SBATCH --nodes=1
 #SBATCH --partition=xgpu
 #SBATCH --gres=gpu:tesla:1
@@ -14,10 +14,7 @@ module load cuda/10.1
 source /home/d.sorge/.bashrc
 conda activate venv
 
-#/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/cifar_checkpoint
-#--dist-url 'tcp://localhost:29500'
-
-CUDA_LAUNCH_BLOCKING=1 python train_derived.py \
+python train_derived.py \
 -gen_bs 128 \
 -dis_bs 64 \
 --dist-url 'tcp://localhost:10641' \
@@ -60,6 +57,6 @@ CUDA_LAUNCH_BLOCKING=1 python train_derived.py \
 --ema_warmup 0.1 \
 --ema 0.9999 \
 --diff_aug translation,cutout,color \
---load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/logs/cifar_eeg_128lstm4class_train_2022_05_05_20_04_05/Model/checkpointForEpoch381 \
+--load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/cifar_checkpoint \
 --lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm_128_subject0_epoch_80.pth \
---exp_name cifar_eeg_128lstm4class_train
+--exp_name cifar_eeg_128lstm_train
