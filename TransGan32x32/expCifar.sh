@@ -1,5 +1,5 @@
 #!/bin/bash
-#SBATCH --job-name=VisualImagCifarLstm128
+#SBATCH --job-name=VisualImagCifarLstm
 #SBATCH --nodes=1
 #SBATCH --partition=xgpu
 #SBATCH --gres=gpu:tesla:1
@@ -58,5 +58,5 @@ python train_derived.py \
 --ema 0.9999 \
 --diff_aug translation,cutout,color \
 --load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/cifar_checkpoint \
---lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm_128_subject0_epoch_80.pth \
---exp_name cifar_eeg_128lstm_train
+--lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm_256_subject0_epoch_60.pth \
+--exp_name cifar_eeg_lstm_train
