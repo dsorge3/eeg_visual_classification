@@ -1,9 +1,3 @@
-# -*- coding: utf-8 -*-
-# @Date    : 2019-07-25
-# @Author  : Xinyu Gong (xy_gong@tamu.edu)
-# @Link    : None
-# @Version : 0.0
-
 import logging
 import operator
 import os
@@ -14,14 +8,12 @@ import tensorflow as tf
 import torch
 import torch.nn as nn
 from imageio import imsave
-#from utils.inception_score import get_inception_score
 from utils.utils import make_grid, save_image
 from tqdm import tqdm
 import cv2
 
 from pytorch_gan_metrics.utils import get_inception_score_from_directory
 
-# from utils.fid_score import calculate_fid_given_paths
 from utils.torch_fid_score import get_fid
 
 from torch.utils.data import DataLoader
@@ -34,7 +26,6 @@ preprocess = transforms.Compose([
     transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
 ])
 
-# from utils.inception_score import get_inception_scorepython exps/dist1_new_church256.py --node 0022 --rank 0sample
 
 logger = logging.getLogger(__name__)
 
@@ -94,7 +85,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
     dis_optimizer.zero_grad()
     gen_optimizer.zero_grad()
 
-    # **MODIFICA3: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
+    # **MODIFICA: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
     for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
 
@@ -106,16 +97,12 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         # ---------------------
 
         real_validity = dis_net(real_imgs)
-        #eeg = torch.flatten(eeg, start_dim=1)          #MODIFICA: AGGIUNTA OPERAZIONE FLATTEN PRIMA DELLA CHIAMATA ALL'AUTOENCODER
         with torch.no_grad():                                       #MODIFICA: AGGIUNTA DI TORCH.NO_GRAD
-            #rec = lstm(eeg.cpu(), return_eeg_repr=True)             #MODIFICA: AGGIUNTA CHIAMATA LSTM (LSTM SU CPU PER L'EXP DI STL)
-            rec = lstm(eeg, return_eeg_repr=True)
-        #rec = rec.cuda()                                            #MODIFICA: REC VIENE SPOSTATO SU GPU PER L'EXP DI STL
+            rec = lstm(eeg.cpu(), return_eeg_repr=True)             #MODIFICA: AGGIUNTA CHIAMATA LSTM (LSTM SU CPU PER L'EXP DI STL)
+        rec = rec.cuda()                                            #MODIFICA: REC VIENE SPOSTATO SU GPU PER L'EXP DI STL
         z = torch.normal(mean=0, std=1, size=rec.shape).cuda()      #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
         rec_z = torch.cat((rec, z), dim=-1)                         #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
         fake_imgs = gen_net(rec_z, epoch).detach()                  #MODIFICA: ALLA GAN PER L'EXP DI STL VIENE PASSATO rec_z PERCHE' HA LATENT_DIM A 512 E PER CIFAR CON LSTM A 128 PERCHE' HA LATENT DIM 256
-        #fake_imgs = gen_net(rec, epoch).detach()        #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
-        #fake_imgs = gen_net(eeg, epoch).detach()
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
 
@@ -181,10 +168,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
 
             for accumulated_idx in range(args.g_accumulated_times):
-                #gen_eeg = gen_net(eeg, epoch)
-                #gen_eeg = gen_net(rec, epoch)       #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
-                #gen_eeg = gen_net(rec_z, epoch)       #MODIFICA: ALLA GAN PER L'EXP DI STL VIENE PASSATO rec_z PERCHE' HA LATENT_DIM A 512
-                gen_eeg = gen_net(rec_z, epoch)       #MODIFICA: ALLA GAN PER L'EXP DI CIFAR CON LSTM A 128 VIENE PASSATO rec_z PERCHE' HA LATENT_DIM A 256
+                gen_eeg = gen_net(rec_z, epoch)       #MODIFICA: ALLA GAN PER L'EXP DI STL VIENE PASSATO rec_z PERCHE' HA LATENT_DIM A 512
                 fake_validity = dis_net(gen_eeg)
 
                 # cal loss
@@ -208,8 +192,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
                     fake_image1, fake_image2 = gen_eeg[:args.gen_batch_size // 2], gen_eeg[args.gen_batch_size // 2:]
-                    #eeg_random1, eeg_random2 = eeg[:args.gen_batch_size // 2], eeg[args.gen_batch_size // 2:]
-                    #eeg_random1, eeg_random2 = rec[:args.gen_batch_size // 2], rec[args.gen_batch_size // 2:]
                     eeg_random1, eeg_random2 = rec_z[:args.gen_batch_size // 2], rec_z[args.gen_batch_size // 2:]  # STL EXP e CIFAR CON LSTM A 128 EXP
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
                         torch.abs(eeg_random2 - eeg_random1))
@@ -246,8 +228,8 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
             # moving average weight
             for p, avg_p in zip(gen_net.parameters(), gen_avg_param):
                 cpu_p = deepcopy(p)
-                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI AVVIA DA 0 L'EXP
-                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI EFFETTUA IL RESUME
+                avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cpu().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI AVVIA DA 0 L'EXP
+                #avg_p.mul_(ema_beta).add_(1. - ema_beta, cpu_p.cuda().data)     #MODIFICA: IMPOSTAZIONE DA USARE QUANDO SI EFFETTUA IL RESUME
                 del cpu_p
 
             writer.add_scalar('g_loss', g_loss.item(), global_steps) if args.rank == 0 else 0
@@ -256,11 +238,6 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         # verbose
         if gen_step and iter_idx % args.print_freq == 0 and args.rank == 0:
             sample_imgs = torch.cat((gen_eeg[:16], real_imgs[:16]), dim=0)
-            #             scale_factor = args.img_size // int(sample_imgs.size(3))
-            #             sample_imgs = torch.nn.functional.interpolate(sample_imgs, scale_factor=2)
-            #             img_grid = make_grid(sample_imgs, nrow=4, normalize=True, scale_each=True)
-            #             save_image(sample_imgs, f'sampled_images_{args.exp_name}.jpg', nrow=4, normalize=True, scale_each=True)
-            # writer.add_image(f'sampled_images_{args.exp_name}', img_grid, global_steps)
             tqdm.write(
                 "[Epoch %d/%d] [Batch %d/%d] [D loss: %f] [G loss: %f] [ema: %f] " %
                 (epoch, args.max_epoch, iter_idx % len(train_loader), len(train_loader), d_loss.item(), g_loss.item(),
@@ -409,59 +386,18 @@ def validate(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, cl
 
     return mean, -9999
 
-"""
-def save_samples(args, fixed_z, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
-    # eval mode
-    gen_net.eval()
-    with torch.no_grad():
-        # generate images
-        batch_size = fixed_z.size(0)
-        sample_imgs = []
-        for i in range(fixed_z.size(0)):
-            sample_img = gen_net(fixed_z[i:(i + 1)], epoch)
-            sample_imgs.append(sample_img)
-        sample_imgs = torch.cat(sample_imgs, dim=0)
-        os.makedirs(f"./samples/{args.exp_name}", exist_ok=True)
-        save_image(sample_imgs, f'./samples/{args.exp_name}/sampled_images_{epoch}.png', nrow=10, normalize=True,
-                   scale_each=True)
-    return 0
-"""
-
-"""
-def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, writer_dict, clean_dir=True):
-    #parent_dir = "/home/d.sorge/eeg_visual_classification"
-    # eval mode
-    gen_net.eval()
-    with torch.no_grad():
-        # generate images
-        sample_imgs = []
-        for i, (eeg, label, imgs) in enumerate(train_loader):
-            sample_img = gen_net(eeg, epoch)
-            sample_imgs.append(sample_img)
-        sample_imgs = torch.cat(sample_imgs, dim=0)
-        #directory = "/outputEpoch{epoch}"
-        #path = os.path.join(parent_dir, directory)
-        #os.makedirs(path)
-        os.makedirs(f"./outputEpoch{epoch}", exist_ok=True)
-        save_image(sample_imgs, f'./outputEpoch{epoch}/sampled_images_{epoch}.png', nrow=10, normalize=True,
-                   scale_each=True)
-    return 0
-"""
-
 def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: nn.Module, writer_dict, clean_dir=True):
     # eval mode
     gen_net.eval()
     with torch.no_grad():
         os.makedirs(f"./training_output_128lstm4class_cifar/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
-            rec = lstm(eeg, return_eeg_repr=True)
-            #rec = lstm(eeg.cpu(), return_eeg_repr=True)                 #MODIFICA: EEG E LSTM SU CPU PER L'EXP DI STL
-            #rec = rec.cuda()                                            #MODIFICA: REC VIENE SPOSTATO SU GPU PER L'EXP DI STL
+            rec = lstm(eeg.cpu(), return_eeg_repr=True)                 #MODIFICA: EEG E LSTM SU CPU PER L'EXP DI STL
+            rec = rec.cuda()                                            #MODIFICA: REC VIENE SPOSTATO SU GPU PER L'EXP DI STL
             z = torch.normal(mean=0, std=1, size=rec.shape).cuda()      #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
             rec_z = torch.cat((rec,z), dim=-1)                          #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
             sample_img = gen_net(rec_z, epoch)                          #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-            #sample_img = gen_net(rec, epoch)                           #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
-            save_image(sample_img, f'./training_output_128lstm4class_cifar/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
+            save_image(sample_img, f'./training_output_lstm_stl/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
 
 def images_IS_by_categories(args, test_loader, fid_stat, epoch, gen_net: nn.Module, lstm: nn.Module, writer_dict, clean_dir=True):
@@ -469,8 +405,6 @@ def images_IS_by_categories(args, test_loader, fid_stat, epoch, gen_net: nn.Modu
     gen_net.eval()
     with torch.no_grad():
         for i, (eeg, label, imgs) in enumerate(test_loader):
-            #rec = lstm(eeg, return_eeg_repr=True)
-            #sample_img = gen_net(rec, epoch)
             rec = lstm(eeg.cpu(), return_eeg_repr=True)                 #MODIFICA: EEG E LSTM SU CPU PER L'EXP DI STL
             rec = rec.cuda()                                            #MODIFICA: REC VIENE SPOSTATO SU GPU PER L'EXP DI STL
             z = torch.normal(mean=0, std=1, size=rec.shape).cuda()      #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL
@@ -486,8 +420,6 @@ def images_IS_by_categories(args, test_loader, fid_stat, epoch, gen_net: nn.Modu
                     save_image(x, f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/output_stl_Categories/outputLabel{label[j]}/sampled_image_{j}_{epoch}.png', nrow=10, normalize=True, scale_each=True)  
 
         for z in range(40):
-            #assert os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/output_stl_Categories/outputLabel{label[z]}')
-            #IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/output_stl_Categories/outputLabel{label[z]}')
             assert os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/output_stl_Categories/outputLabel{z}')
             IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/output_stl_Categories/outputLabel{z}')
             print("Inception Score Category outputLabel", z, ":", IS)
