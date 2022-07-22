@@ -9,7 +9,7 @@ import torch.distributed as dist
 class ImageDataset(object):
     def __init__(self, args, cur_img_size=None, bs=None):
         bs = args.dis_batch_size if bs == None else bs
-        img_size = cur_img_size if args.fade_in > 0 else args.img_size   
+        img_size = cur_img_size if args.fade_in > 0 else args.img_size
         if args.dataset.lower() == 'cifar10':
             Dt = datasets.CIFAR10
             transform = transforms.Compose([
@@ -20,8 +20,8 @@ class ImageDataset(object):
             ])
             args.n_classes = 0
             train_dataset = Dt(root=args.data_path, train=True, transform=transform, download=True)
-            val_dataset = Dt(root=args.data_path, train=False, transform=transform)
-            
+            val_dataset = Dt(root=args.data_path, train=False, transform=transform, download=True)
+
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
@@ -36,7 +36,7 @@ class ImageDataset(object):
                 num_workers=args.num_workers, pin_memory=True, sampler=val_sampler)
 
             self.test = self.valid
-           
+
         elif args.dataset.lower() == 'stl10':
             Dt = datasets.STL10
             transform = transforms.Compose([
@@ -45,7 +45,7 @@ class ImageDataset(object):
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
-            
+
             train_dataset = Dt(root=args.data_path, split='train+unlabeled', transform=transform, download=True)
             val_dataset = Dt(root=args.data_path, split='test', transform=transform)
             if args.distributed:
@@ -68,12 +68,11 @@ class ImageDataset(object):
             self.test = self.valid
 
         elif args.dataset.lower() == 'eegdataset':      #MODIFICA1: IMPORT EEGDataset
-
             Dt = EEGDataset
             transform = transforms.Compose([
                 transforms.ToPILImage(),
                 transforms.Resize(size=(img_size, img_size)),
-                transforms.RandomCrop(32),
+                transforms.CenterCrop(64),
                 transforms.RandomHorizontalFlip(),
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
@@ -82,7 +81,6 @@ class ImageDataset(object):
             train_dataset = Dt(eeg_signals_path=args.eeg_dataset, split_path=args.splits_path, split_num=args.split_num, transform=transform)
             val_dataset = Dt(eeg_signals_path=args.eeg_dataset, split_path=args.splits_path, split_num=args.split_num, transform=transform)
 
-        
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
@@ -90,12 +88,12 @@ class ImageDataset(object):
                 train_dataset,
                 batch_size=args.dis_batch_size, shuffle=(train_sampler is None),
                 num_workers=args.num_workers, pin_memory=True, drop_last=True, sampler=train_sampler)
-         
+            
             self.valid = torch.utils.data.DataLoader(
                 val_dataset,
                 batch_size=args.dis_batch_size, shuffle=False,
                 num_workers=args.num_workers, pin_memory=True, sampler=val_sampler)
-           
+
             self.test = torch.utils.data.DataLoader(
                 val_dataset,
                 batch_size=args.dis_batch_size, shuffle=False,
@@ -109,10 +107,10 @@ class ImageDataset(object):
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
-            
+
             train_dataset = Dt(root=args.data_path, transform=transform)
             val_dataset = Dt(root=args.data_path, transform=transform)
-            
+
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
@@ -138,14 +136,14 @@ class ImageDataset(object):
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
-            
+
             train_dataset = Dt(root=args.data_path, transform=transform)
             val_dataset = Dt(root=args.data_path, transform=transform)
-            
+
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
-            
+
             self.train = torch.utils.data.DataLoader(
                 train_dataset,
                 batch_size=args.dis_batch_size, shuffle=(train_sampler is None),
@@ -168,10 +166,10 @@ class ImageDataset(object):
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
-            
+
             train_dataset = Dt(root=args.data_path, classes=["bedroom_train"], transform=transform)
             val_dataset = Dt(root=args.data_path, classes=["bedroom_val"], transform=transform)
-            
+
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
@@ -197,10 +195,10 @@ class ImageDataset(object):
                 transforms.ToTensor(),
                 transforms.Normalize((0.5, 0.5, 0.5), (0.5, 0.5, 0.5)),
             ])
-            
+
             train_dataset = Dt(root=args.data_path, classes=["church_outdoor_train"], transform=transform)
             val_dataset = Dt(root=args.data_path, classes=["church_outdoor_val"], transform=transform)
-            
+
             train_sampler = torch.utils.data.distributed.DistributedSampler(train_dataset)
             val_sampler = torch.utils.data.distributed.DistributedSampler(val_dataset)
             self.train_sampler = train_sampler
