@@ -26,16 +26,9 @@ import random
 
 import lstm
 
-# torch.backends.cudnn.enabled = True
-# torch.backends.cudnn.benchmark = True
-
 
 def main():
     args = cfg.parse_args()
-    
-#     _init_inception()
-#     inception_path = check_or_download_inception(None)
-#     create_inception_graph(inception_path)
     
     if args.seed is not None:
         torch.manual_seed(args.random_seed)
@@ -94,15 +87,6 @@ def main_worker(gpu, ngpus_per_node, args):
                 nn.init.xavier_uniform(m.weight.data, 1.)
             else:
                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
-#         elif classname.find('Linear') != -1:
-#             if args.init_type == 'normal':
-#                 nn.init.normal_(m.weight.data, 0.0, 0.02)
-#             elif args.init_type == 'orth':
-#                 nn.init.orthogonal_(m.weight.data)
-#             elif args.init_type == 'xavier_uniform':
-#                 nn.init.xavier_uniform(m.weight.data, 1.)
-#             else:
-#                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
         elif classname.find('BatchNorm2d') != -1:
             nn.init.normal_(m.weight.data, 1.0, 0.02)
             nn.init.constant_(m.bias.data, 0.0)
@@ -170,20 +154,6 @@ def main_worker(gpu, ngpus_per_node, args):
     gen_scheduler = LinearLrDecay(gen_optimizer, args.g_lr, 0.0, 0, args.max_iter * args.n_critic)
     dis_scheduler = LinearLrDecay(dis_optimizer, args.d_lr, 0.0, 0, args.max_iter * args.n_critic)
 
-    # fid stat
-    """
-    if args.dataset.lower() == 'cifar10':
-        fid_stat = 'fid_stat/fid_stats_cifar10_train.npz'
-    elif args.dataset.lower() == 'stl10':
-        fid_stat = 'fid_stat/stl10_train_unlabeled_fid_stats_48.npz'
-    elif args.fid_stat is not None:
-        fid_stat = args.fid_stat
-    else:
-        raise NotImplementedError(f'no fid stat for {args.dataset.lower()}')
-    assert os.path.exists(fid_stat)
-    """
-
-
     # epoch number for dis_net
     args.max_epoch = args.max_epoch * args.n_critic
     dataset = datasets.ImageDataset(args, cur_img_size=64)
@@ -201,21 +171,20 @@ def main_worker(gpu, ngpus_per_node, args):
     best_fid = 1e4
 
     # Load model
-    #lstm_net = lstm.Model(128, 256, 1, 256)
-    lstm_net = lstm.Model(128, 128, 1, 128)     # UTILIZZATA PER L'EXP DI CIFAR CON LSTM A 128
+    lstm_net = lstm.Model(128, 128, 1, 128)
 
     # set writer
     writer = None
     if args.load_path:
         #CODICE USATO LA PRIMA VOLTA SOLO PER IL RESUME DI CIFAR E STL CHECKPOINT E LA CREAZIONE DELL'NUOVO EXP
         # create new log dir
-        """
+        
         assert args.exp_name
         if args.rank == 0:
             args.path_helper = set_log_dir('logs', args.exp_name)
             logger = create_logger(args.path_helper['log_path'])
             writer = SummaryWriter(args.path_helper['log_path'])
-        """
+        
         print(f'=> resuming from {args.load_path}')
         assert os.path.exists(args.load_path)
         checkpoint_file = os.path.join(args.load_path)
@@ -230,35 +199,29 @@ def main_worker(gpu, ngpus_per_node, args):
         gen_optimizer.load_state_dict(checkpoint['gen_optimizer'])
         dis_optimizer.load_state_dict(checkpoint['dis_optimizer'])
         
-#         avg_gen_net = deepcopy(gen_net)
-        gen_avg_param = checkpoint['avg_gen_state_dict']       #CODICE MIO PER IL RESUME
-        gen_net.load_state_dict(checkpoint['gen_state_dict'])  #CODICE MIO PER IL RESUME
-        #gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])   #CODICE LORO PER IL RESUME
-        #gen_avg_param = copy_params(gen_net, mode='gpu')            #CODICE LORO PER IL RESUME
-        #gen_net.load_state_dict(checkpoint['gen_state_dict'])       #CODICE LORO PER IL RESUME
-#         del avg_gen_net
-#         gen_avg_param = list(p.cuda().to(f"cuda:{args.gpu}") for p in gen_avg_param)
+        #gen_avg_param = checkpoint['avg_gen_state_dict']       #CODICE MIO PER IL RESUME
+        #gen_net.load_state_dict(checkpoint['gen_state_dict'])  #CODICE MIO PER IL RESUME
+        gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])   #CODICE LORO PER IL RESUME
+        gen_avg_param = copy_params(gen_net, mode='gpu')            #CODICE LORO PER IL RESUME
+        gen_net.load_state_dict(checkpoint['gen_state_dict'])       #CODICE LORO PER IL RESUME
         
 
-        args.path_helper = checkpoint['path_helper']            #COMMENTATO SOLO LA PRIMA VOLTA
-        logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
+        #args.path_helper = checkpoint['path_helper']            #COMMENTATO SOLO LA PRIMA VOLTA
+        #logger = create_logger(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
         print(f'=> loaded checkpoint {checkpoint_file} (epoch {start_epoch})')
-        writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
-        #del checkpoint
+        #writer = SummaryWriter(args.path_helper['log_path']) if args.rank == 0 else None   #COMMENTATO SOLO LA PRIMA VOLTA
 
         print(f'=> resuming lstm from {args.lstm_path}')      #MODIFICA: RESUME LSTM NET
         assert os.path.exists(args.lstm_path)
         checkpoint_lstm = os.path.join(args.lstm_path)
         assert os.path.exists(checkpoint_lstm)
         loc = 'cuda:{}'.format(args.gpu)
-        #lstm_dict = torch.load(checkpoint_lstm, map_location=loc)
         lstm_dict = torch.load(checkpoint_lstm, map_location='cpu')
         lstm_net.load_state_dict(lstm_dict)
         lstm_net.zero_grad()
         lstm_net.eval()
-        #lstm_net = lstm_net.cuda()
-        lstm_net.to(torch.device("cuda"))       # DA COMMENTARE PER EXP DI STL
-        lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)     # DA COMMENTARE PER EXP DI STL
+        lstm_net.to(torch.device("cuda"))     
+        lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)  
         print(f'=> loaded checkpoint {checkpoint_lstm}')
         
         del checkpoint
@@ -279,7 +242,6 @@ def main_worker(gpu, ngpus_per_node, args):
         lstm_net.load_state_dict(lstm_dict)
         lstm_net.zero_grad()
         lstm_net.eval()
-        #lstm_net = lstm_net.cuda()
         lstm_net.to(torch.device("cuda"))
         lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)
         print(f'=> loaded checkpoint {checkpoint_lstm}')
@@ -312,7 +274,7 @@ def main_worker(gpu, ngpus_per_node, args):
         backup_param = copy_params(gen_net, mode="gpu")
         load_params(gen_net, gen_avg_param, args, mode="cpu")
         save_samples(args, save_image_loader, None, epoch, gen_net, lstm_net, writer_dict)
-        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/training_output_128lstm4class_cifar/outputEpoch{epoch}')
+        IS, IS_std = get_inception_score_from_directory(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/training_output_lstm_cifar/outputEpoch{epoch}')
         print("Inception Score Epoch", epoch, ":", IS)
         load_params(gen_net, backup_param, args, mode="cpu")
         is_best = False
