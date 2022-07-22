@@ -27,7 +27,7 @@ python train_derived.py \
 --img_size 64 \
 --max_iter 500000 \
 --gen_model ViT_custom_local544444_256_rp \
---dis_model ViT_sclae2_copy \
+--dis_model ViT_scale2 \
 --g_window_size 16 \
 --d_window_size 16 \
 --g_norm pn \
