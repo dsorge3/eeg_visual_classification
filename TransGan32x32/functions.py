@@ -85,7 +85,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
     dis_optimizer.zero_grad()
     gen_optimizer.zero_grad()
 
-    # **MODIFICA: PASSAGGIO DEGLI EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
+    # **MODIFICA: PASSAGGIO DEEL'EEG COME PARAMETRO ALLA CLASSE gen_net (GENERATORE) E DI IMAGE ALLA CLASSE dis_net (DISRCIMINATORE), RITORNATI DALLA CLASSE EEGDataset **
     for iter_idx, (eeg, label, imgs) in enumerate(tqdm(train_loader)):
         global_steps = writer_dict['train_global_steps']
 
@@ -99,9 +99,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         real_validity = dis_net(real_imgs)
         with torch.no_grad():                                       #MODIFICA: AGGIUNTA DI TORCH.NO_GRAD
             rec = lstm(eeg, return_eeg_repr=True)
-        z = torch.normal(mean=0, std=1, size=rec.shape).cuda()      #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-        rec_z = torch.cat((rec, z), dim=-1)                         #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-        fake_imgs = gen_net(rec_z, epoch).detach()                  #MODIFICA: ALLA GAN PER L'EXP DI STL VIENE PASSATO rec_z PERCHE' HA LATENT_DIM A 512 E PER CIFAR CON LSTM A 128 PERCHE' HA LATENT DIM 256
+        fake_imgs = gen_net(rec, epoch).detach()        #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
         assert fake_imgs.size() == real_imgs.size(), f"fake_imgs.size(): {fake_imgs.size()} real_imgs.size(): {real_imgs.size()}"
         fake_validity = dis_net(fake_imgs)
 
@@ -167,7 +165,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
         if global_steps % (args.n_critic * args.accumulated_times) == 0:
 
             for accumulated_idx in range(args.g_accumulated_times):
-                gen_eeg = gen_net(rec_z, epoch)       #MODIFICA: ALLA GAN PER L'EXP DI CIFAR CON LSTM A 128 VIENE PASSATO rec_z PERCHE' HA LATENT_DIM A 256
+                gen_eeg = gen_net(rec, epoch)       #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
                 fake_validity = dis_net(gen_eeg)
 
                 # cal loss
@@ -191,7 +189,7 @@ def train(args, gen_net: nn.Module, dis_net: nn.Module, lstm: nn.Module, gen_opt
                         g_loss = nn.MSELoss()(fake_validity, real_label)
                 elif args.loss == 'wgangp-mode':
                     fake_image1, fake_image2 = gen_eeg[:args.gen_batch_size // 2], gen_eeg[args.gen_batch_size // 2:]
-                    eeg_random1, eeg_random2 = rec_z[:args.gen_batch_size // 2], rec_z[args.gen_batch_size // 2:]  #MODIFICA: STL EXP e CIFAR CON LSTM A 128 EXP
+                    eeg_random1, eeg_random2 = rec[:args.gen_batch_size // 2], rec[args.gen_batch_size // 2:]
                     lz = torch.mean(torch.abs(fake_image2 - fake_image1)) / torch.mean(
                         torch.abs(eeg_random2 - eeg_random1))
                     eps = 1 * 1e-5
@@ -392,9 +390,7 @@ def save_samples(args, train_loader, fid_stat, epoch, gen_net: nn.Module, lstm: 
         os.makedirs(f"./training_output_128lstm4class_cifar/outputEpoch{epoch}", exist_ok=True)
         for i, (eeg, label, imgs) in enumerate(train_loader):
             rec = lstm(eeg, return_eeg_repr=True)
-            z = torch.normal(mean=0, std=1, size=rec.shape).cuda()      #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-            rec_z = torch.cat((rec,z), dim=-1)                          #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-            sample_img = gen_net(rec_z, epoch)                          #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
+            sample_img = gen_net(rec, epoch)                           #MODIFICA: OUTPUT LSTM USATO COME INPUT ALLA GAN
             save_image(sample_img, f'./training_output_lstm_cifar/outputEpoch{epoch}/sampled_image_{i}_{epoch}.png', nrow=10, normalize=True, scale_each=True)
     return 0
 
@@ -404,9 +400,7 @@ def images_IS_by_categories(args, test_loader, fid_stat, epoch, gen_net: nn.Modu
     with torch.no_grad():
         for i, (eeg, label, imgs) in enumerate(test_loader):
             rec = lstm(eeg, return_eeg_repr=True)
-            z = torch.normal(mean=0, std=1, size=rec.shape).cuda()      #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-            rec_z = torch.cat((rec,z), dim=-1)                          #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
-            sample_img = gen_net(rec_z, epoch)                          #MODIFICA: RIGA UTILIZZATA E AGGIUNTA PER L'EXP DI STL E CIFAR CON LSTM A 128
+            sample_img = gen_net(rec, epoch)
 
             for j, x in enumerate(sample_img):
                 isExist = os.path.exists(f'/home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/output_cifar_Categories/outputLabel{label[j]}')
