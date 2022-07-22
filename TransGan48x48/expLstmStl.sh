@@ -62,6 +62,6 @@ python train_derived.py \
 --ema_warmup 0.05 \
 --ema 0.9999 \
 --diff_aug translation,stl_erase_ratio,color \
---load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/logs/stl_eeg_lstm_train_2022_03_30_10_45_59/Model/checkpointForEpoch169 \
+--load_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_original/TransGAN-master/stl_checkpoint \
 --lstm_path /home/d.sorge/eeg_visual_classification/eeg_visual_classification_main/lstm_256_subject0_epoch_50.pth \
 --exp_name stl_eeg_lstm_train
