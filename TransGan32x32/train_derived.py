@@ -27,8 +27,13 @@ import random
 import lstm
 
 
+
 def main():
     args = cfg.parse_args()
+    
+#     _init_inception()
+#     inception_path = check_or_download_inception(None)
+#     create_inception_graph(inception_path)
     
     if args.seed is not None:
         torch.manual_seed(args.random_seed)
@@ -87,6 +92,15 @@ def main_worker(gpu, ngpus_per_node, args):
                 nn.init.xavier_uniform(m.weight.data, 1.)
             else:
                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
+#         elif classname.find('Linear') != -1:
+#             if args.init_type == 'normal':
+#                 nn.init.normal_(m.weight.data, 0.0, 0.02)
+#             elif args.init_type == 'orth':
+#                 nn.init.orthogonal_(m.weight.data)
+#             elif args.init_type == 'xavier_uniform':
+#                 nn.init.xavier_uniform(m.weight.data, 1.)
+#             else:
+#                 raise NotImplementedError('{} unknown inital type'.format(args.init_type))
         elif classname.find('BatchNorm2d') != -1:
             nn.init.normal_(m.weight.data, 1.0, 0.02)
             nn.init.constant_(m.bias.data, 0.0)
@@ -154,6 +168,7 @@ def main_worker(gpu, ngpus_per_node, args):
     gen_scheduler = LinearLrDecay(gen_optimizer, args.g_lr, 0.0, 0, args.max_iter * args.n_critic)
     dis_scheduler = LinearLrDecay(dis_optimizer, args.d_lr, 0.0, 0, args.max_iter * args.n_critic)
 
+
     # epoch number for dis_net
     args.max_epoch = args.max_epoch * args.n_critic
     dataset = datasets.ImageDataset(args, cur_img_size=64)
@@ -171,7 +186,7 @@ def main_worker(gpu, ngpus_per_node, args):
     best_fid = 1e4
 
     # Load model
-    lstm_net = lstm.Model(128, 128, 1, 128)
+    lstm_net = lstm.Model(128, 256, 1, 256)
 
     # set writer
     writer = None
@@ -199,11 +214,14 @@ def main_worker(gpu, ngpus_per_node, args):
         gen_optimizer.load_state_dict(checkpoint['gen_optimizer'])
         dis_optimizer.load_state_dict(checkpoint['dis_optimizer'])
         
+#         avg_gen_net = deepcopy(gen_net)
         #gen_avg_param = checkpoint['avg_gen_state_dict']       #CODICE MIO PER IL RESUME
         #gen_net.load_state_dict(checkpoint['gen_state_dict'])  #CODICE MIO PER IL RESUME
         gen_net.load_state_dict(checkpoint['avg_gen_state_dict'])   #CODICE LORO PER IL RESUME
         gen_avg_param = copy_params(gen_net, mode='gpu')            #CODICE LORO PER IL RESUME
         gen_net.load_state_dict(checkpoint['gen_state_dict'])       #CODICE LORO PER IL RESUME
+#         del avg_gen_net
+#         gen_avg_param = list(p.cuda().to(f"cuda:{args.gpu}") for p in gen_avg_param)
         
 
         #args.path_helper = checkpoint['path_helper']            #COMMENTATO SOLO LA PRIMA VOLTA
@@ -220,8 +238,8 @@ def main_worker(gpu, ngpus_per_node, args):
         lstm_net.load_state_dict(lstm_dict)
         lstm_net.zero_grad()
         lstm_net.eval()
-        lstm_net.to(torch.device("cuda"))     
-        lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)  
+        lstm_net.to(torch.device("cuda"))       
+        lstm_net = torch.nn.parallel.DistributedDataParallel(lstm_net, device_ids=[args.gpu], find_unused_parameters=False)   
         print(f'=> loaded checkpoint {checkpoint_lstm}')
         
         del checkpoint
